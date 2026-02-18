@@ -49,8 +49,9 @@ type Node struct {
 
 	minerAddress string
 
-	// Sync
-	syncMu sync.Mutex
+	// Sync: track which peers are currently being synced to avoid duplicates
+	syncingPeers   map[peer.ID]struct{}
+	syncingPeersMu sync.Mutex
 
 	// Reorg tracking: skip duplicate EventNewTip after reorg
 	lastReorgTip [32]byte
@@ -87,6 +88,7 @@ func NewNode(cfg *config.Config, minerAddress string, logger *zap.Logger) *Node 
 		config:       cfg,
 		logger:       logger,
 		minerAddress: minerAddress,
+		syncingPeers: make(map[peer.ID]struct{}),
 	}
 }
 
@@ -564,12 +566,22 @@ func (n *Node) buildLocator() [][32]byte {
 }
 
 // syncFromPeer performs locator-based sharechain sync from a connected peer.
-// Only one sync runs at a time (protected by syncMu).
+// Multiple peers can sync concurrently, but each peer only syncs once at a time.
 func (n *Node) syncFromPeer(ctx context.Context, peerID peer.ID) {
-	if !n.syncMu.TryLock() {
-		return // another sync is already running
+	// Skip if already syncing from this peer
+	n.syncingPeersMu.Lock()
+	if _, active := n.syncingPeers[peerID]; active {
+		n.syncingPeersMu.Unlock()
+		return
 	}
-	defer n.syncMu.Unlock()
+	n.syncingPeers[peerID] = struct{}{}
+	n.syncingPeersMu.Unlock()
+
+	defer func() {
+		n.syncingPeersMu.Lock()
+		delete(n.syncingPeers, peerID)
+		n.syncingPeersMu.Unlock()
+	}()
 
 	syncer := n.p2pNode.Syncer()
 	if syncer == nil {
@@ -621,9 +633,10 @@ func (n *Node) syncFromPeer(ctx context.Context, peerID peer.ID) {
 	}
 
 	n.logger.Info("sync complete",
-		zap.Int("new_shares", totalAdded),
-		zap.Int("already_known", totalSkipped),
 		zap.String("peer", peerID.String()),
+		zap.Int("downloaded", totalAdded),
+		zap.Int("duplicate", totalSkipped),
+		zap.Int("chain_length", n.chain.Count()),
 	)
 
 	// Trigger a single work regeneration now that the chain tip has changed

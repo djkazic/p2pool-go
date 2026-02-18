@@ -110,15 +110,13 @@ func TestInvProtocol_EmptyChain(t *testing.T) {
 	}
 }
 
-func TestInvProtocol_MaxCountClamped(t *testing.T) {
+func TestInvProtocol_MaxCountRejected(t *testing.T) {
 	logger := zap.NewNop()
 
 	hostA := newTestHost(t)
 	hostB := newTestHost(t)
 
-	var receivedMaxCount int
 	NewSyncer(hostA, func(req *InvReq) *InvResp {
-		receivedMaxCount = req.MaxCount
 		return &InvResp{Type: MsgTypeInvResp}
 	}, noopDataHandler, logger)
 
@@ -131,14 +129,10 @@ func TestInvProtocol_MaxCountClamped(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Request more than maxInvCount
+	// Request more than maxInvCount — server rejects at decode
 	_, err := syncerB.RequestInventory(ctx, hostA.ID(), nil, 50000)
-	if err != nil {
-		t.Fatalf("RequestInventory: %v", err)
-	}
-
-	if receivedMaxCount != maxInvCount {
-		t.Errorf("MaxCount = %d, want %d (clamped)", receivedMaxCount, maxInvCount)
+	if err == nil {
+		t.Fatal("expected error for oversized MaxCount, got nil")
 	}
 }
 
@@ -264,17 +258,15 @@ func TestInvProtocol_LocatorForkPoint(t *testing.T) {
 	}
 }
 
-func TestDataProtocol_BatchSizeClamped(t *testing.T) {
+func TestDataProtocol_BatchSizeRejected(t *testing.T) {
 	logger := zap.NewNop()
 
 	hostA := newTestHost(t)
 	hostB := newTestHost(t)
 
-	var receivedCount int
 	noopInv := func(req *InvReq) *InvResp { return &InvResp{Type: MsgTypeInvResp} }
 
 	NewSyncer(hostA, noopInv, func(req *DataReq) *DataResp {
-		receivedCount = len(req.Hashes)
 		return &DataResp{Type: MsgTypeDataResp}
 	}, logger)
 
@@ -285,7 +277,7 @@ func TestDataProtocol_BatchSizeClamped(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Send more hashes than maxSyncBatchSize
+	// Send more hashes than maxDataReqHashes — server rejects at decode
 	hashes := make([][32]byte, 200)
 	for i := range hashes {
 		hashes[i][0] = byte(i)
@@ -293,12 +285,8 @@ func TestDataProtocol_BatchSizeClamped(t *testing.T) {
 	}
 
 	_, err := syncerB.RequestData(ctx, hostA.ID(), hashes)
-	if err != nil {
-		t.Fatalf("RequestData: %v", err)
-	}
-
-	if receivedCount != maxSyncBatchSize {
-		t.Errorf("hash count = %d, want %d (clamped)", receivedCount, maxSyncBatchSize)
+	if err == nil {
+		t.Fatal("expected error for oversized hash count, got nil")
 	}
 }
 
@@ -396,15 +384,13 @@ func TestDataProtocol_EmptyRequest(t *testing.T) {
 	}
 }
 
-func TestInvProtocol_LocatorTruncation(t *testing.T) {
+func TestInvProtocol_LocatorRejected(t *testing.T) {
 	logger := zap.NewNop()
 
 	hostA := newTestHost(t)
 	hostB := newTestHost(t)
 
-	var receivedLocatorCount int
 	NewSyncer(hostA, func(req *InvReq) *InvResp {
-		receivedLocatorCount = len(req.Locators)
 		return &InvResp{Type: MsgTypeInvResp}
 	}, noopDataHandler, logger)
 
@@ -417,18 +403,14 @@ func TestInvProtocol_LocatorTruncation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Send more locators than maxLocatorCount
+	// Send more locators than maxLocatorCount — server rejects at decode
 	locators := make([][32]byte, 100)
 	for i := range locators {
 		locators[i][0] = byte(i)
 	}
 
 	_, err := syncerB.RequestInventory(ctx, hostA.ID(), locators, 100)
-	if err != nil {
-		t.Fatalf("RequestInventory: %v", err)
-	}
-
-	if receivedLocatorCount != maxLocatorCount {
-		t.Errorf("locator count = %d, want %d (truncated)", receivedLocatorCount, maxLocatorCount)
+	if err == nil {
+		t.Fatal("expected error for oversized locator count, got nil")
 	}
 }

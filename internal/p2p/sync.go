@@ -15,10 +15,7 @@ import (
 )
 
 const (
-	maxSyncBatchSize  = 100
 	maxSyncMsgSize    = 1024 * 1024 // 1MB
-	maxLocatorCount   = 64
-	maxInvCount       = 10000
 	syncStreamTimeout = 30 * time.Second
 )
 
@@ -68,13 +65,6 @@ func (s *Syncer) handleSyncStream(stream network.Stream) {
 		return
 	}
 
-	if req.MaxCount > maxInvCount {
-		req.MaxCount = maxInvCount
-	}
-	if len(req.Locators) > maxLocatorCount {
-		req.Locators = req.Locators[:maxLocatorCount]
-	}
-
 	resp := s.invHandler(req)
 	if resp == nil {
 		resp = &InvResp{Type: MsgTypeInvResp}
@@ -104,10 +94,6 @@ func (s *Syncer) handleDataStream(stream network.Stream) {
 	if err != nil {
 		s.logger.Debug("invalid data request", zap.Error(err))
 		return
-	}
-
-	if len(req.Hashes) > maxSyncBatchSize {
-		req.Hashes = req.Hashes[:maxSyncBatchSize]
 	}
 
 	resp := s.dataHandler(req)

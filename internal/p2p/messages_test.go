@@ -93,6 +93,68 @@ func TestShareRequest_RoundTrip(t *testing.T) {
 	}
 }
 
+func TestDecodeShareRequest_CountTooLarge(t *testing.T) {
+	msg := &ShareRequest{Type: MsgTypeShareReq, Count: maxShareRequestCount + 1}
+	data, err := Encode(msg)
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	_, err = DecodeShareRequest(data)
+	if err == nil {
+		t.Fatal("expected error for oversized count")
+	}
+}
+
+func TestDecodeShareRequest_NegativeCount(t *testing.T) {
+	msg := &ShareRequest{Type: MsgTypeShareReq, Count: -1}
+	data, err := Encode(msg)
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	_, err = DecodeShareRequest(data)
+	if err == nil {
+		t.Fatal("expected error for negative count")
+	}
+}
+
+func TestDecodeInvReq_MaxCountTooLarge(t *testing.T) {
+	msg := &InvReq{Type: MsgTypeInvReq, MaxCount: maxInvCount + 1}
+	data, err := Encode(msg)
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	_, err = DecodeInvReq(data)
+	if err == nil {
+		t.Fatal("expected error for oversized MaxCount")
+	}
+}
+
+func TestDecodeInvReq_TooManyLocators(t *testing.T) {
+	locators := make([][32]byte, maxLocatorCount+1)
+	msg := &InvReq{Type: MsgTypeInvReq, Locators: locators, MaxCount: 10}
+	data, err := Encode(msg)
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	_, err = DecodeInvReq(data)
+	if err == nil {
+		t.Fatal("expected error for oversized locator count")
+	}
+}
+
+func TestDecodeDataReq_TooManyHashes(t *testing.T) {
+	hashes := make([][32]byte, maxDataReqHashes+1)
+	msg := &DataReq{Type: MsgTypeDataReq, Hashes: hashes}
+	data, err := Encode(msg)
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	_, err = DecodeDataReq(data)
+	if err == nil {
+		t.Fatal("expected error for oversized hash count")
+	}
+}
+
 func TestBigIntConversion(t *testing.T) {
 	// Test with nil
 	b := BigIntToBytes(nil)

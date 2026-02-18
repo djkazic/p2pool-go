@@ -12,6 +12,14 @@ const (
 	maxP2PCoinbaseTxSize = 100 * 1024 // 100KB
 	// maxP2PMinerAddressLen is the maximum miner address length accepted from P2P peers.
 	maxP2PMinerAddressLen = 128
+	// maxShareRequestCount is the maximum number of shares a peer can request at once.
+	maxShareRequestCount = 500
+	// maxLocatorCount is the maximum number of locator hashes in an InvReq.
+	maxLocatorCount = 64
+	// maxInvCount is the maximum number of hashes an InvReq can request.
+	maxInvCount = 10000
+	// maxDataReqHashes is the maximum number of hashes in a DataReq.
+	maxDataReqHashes = 100
 )
 
 const (
@@ -119,6 +127,9 @@ func DecodeShareRequest(data []byte) (*ShareRequest, error) {
 	if err := cbor.Unmarshal(data, &msg); err != nil {
 		return nil, err
 	}
+	if msg.Count < 0 || msg.Count > maxShareRequestCount {
+		return nil, fmt.Errorf("share request count out of range: %d", msg.Count)
+	}
 	return &msg, nil
 }
 
@@ -163,6 +174,12 @@ func DecodeInvReq(data []byte) (*InvReq, error) {
 	if err := cbor.Unmarshal(data, &msg); err != nil {
 		return nil, err
 	}
+	if len(msg.Locators) > maxLocatorCount {
+		return nil, fmt.Errorf("inv request locator count too large: %d", len(msg.Locators))
+	}
+	if msg.MaxCount < 0 || msg.MaxCount > maxInvCount {
+		return nil, fmt.Errorf("inv request max count out of range: %d", msg.MaxCount)
+	}
 	return &msg, nil
 }
 
@@ -180,6 +197,9 @@ func DecodeDataReq(data []byte) (*DataReq, error) {
 	var msg DataReq
 	if err := cbor.Unmarshal(data, &msg); err != nil {
 		return nil, err
+	}
+	if len(msg.Hashes) > maxDataReqHashes {
+		return nil, fmt.Errorf("data request hash count too large: %d", len(msg.Hashes))
 	}
 	return &msg, nil
 }

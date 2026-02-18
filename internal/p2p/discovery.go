@@ -124,20 +124,30 @@ func (d *Discovery) advertiseLoop(ctx context.Context, rd *drouting.RoutingDisco
 }
 
 func (d *Discovery) discoverLoop(ctx context.Context, rd *drouting.RoutingDiscovery) {
-	peerCh, err := rd.FindPeers(ctx, DHTNamespace)
-	if err != nil {
-		d.logger.Error("DHT find peers error", zap.Error(err))
-		return
-	}
+	backoff := 30 * time.Second
+	const maxBackoff = 5 * time.Minute
 
 	for {
-		select {
-		case <-ctx.Done():
-			return
-		case pi, ok := <-peerCh:
-			if !ok {
+		peerCh, err := rd.FindPeers(ctx, DHTNamespace)
+		if err != nil {
+			d.logger.Warn("DHT find peers error", zap.Error(err), zap.Duration("retry_in", backoff))
+			select {
+			case <-ctx.Done():
 				return
+			case <-time.After(backoff):
 			}
+			backoff *= 2
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
+			continue
+		}
+
+		// Reset backoff on successful FindPeers call.
+		backoff = 30 * time.Second
+
+		// Drain the peer channel until it closes.
+		for pi := range peerCh {
 			if pi.ID == d.host.ID() || pi.ID == "" {
 				continue
 			}
@@ -146,6 +156,14 @@ func (d *Discovery) discoverLoop(ctx context.Context, rd *drouting.RoutingDiscov
 			} else {
 				d.logger.Info("connected to DHT peer", zap.String("peer", pi.ID.String()))
 			}
+		}
+
+		// Channel closed — retry after backoff.
+		d.logger.Debug("DHT peer channel closed, will retry", zap.Duration("retry_in", backoff))
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(backoff):
 		}
 	}
 }

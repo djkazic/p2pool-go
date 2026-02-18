@@ -199,7 +199,7 @@ func (sc *ShareChain) AddShareQuiet(share *types.Share) error {
 		return fmt.Errorf("set tip: %w", err)
 	}
 
-	sc.logger.Info("share added (sync)",
+	sc.logger.Debug("share added (sync)",
 		zap.String("hash", share.HashHex()),
 		zap.String("miner", share.MinerAddress),
 		zap.Int("chain_length", sc.store.Count()),

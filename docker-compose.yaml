@@ -1,0 +1,17 @@
+services:
+  p2pool:
+    build: .
+    ports:
+      - "3333:3333"
+      - "9171:9171"
+    volumes:
+      - p2pool-data:/data
+    environment:
+      - BITCOIN_RPC_HOST=${BITCOIN_RPC_HOST}
+      - BITCOIN_RPC_USER=${BITCOIN_RPC_USER}
+      - BITCOIN_RPC_PASSWORD=${BITCOIN_RPC_PASSWORD}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    command: ["-address", "${PAYOUT_ADDRESS}", "-network", "mainnet", "-rpc-port", "8332"]
+
+volumes:
+  p2pool-data:

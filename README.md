@@ -63,6 +63,47 @@ The `-u` username is just a worker label — payout addresses are set on the nod
 
 Navigate to [http://localhost:3333](http://localhost:3333) in your browser. The web UI is served on the same port as the stratum server.
 
+## Docker
+
+### 1. Configure
+
+Create a `.env` file:
+
+```
+PAYOUT_ADDRESS=bc1pks29cz7w4hj265aanmyp8uwrl9hzykhwf5hl5gf40hlvj5hcs2es0sgm7z
+BITCOIN_RPC_HOST=your_bitcoind_ip
+BITCOIN_RPC_USER=your_rpc_user
+BITCOIN_RPC_PASSWORD=your_rpc_password
+LOG_LEVEL=info
+```
+
+| Variable | Description |
+|---|---|
+| `PAYOUT_ADDRESS` | Your mainnet Bitcoin address (`bc1...`) |
+| `BITCOIN_RPC_HOST` | IP/hostname of your bitcoind |
+| `BITCOIN_RPC_USER` | bitcoind RPC username |
+| `BITCOIN_RPC_PASSWORD` | bitcoind RPC password |
+| `LOG_LEVEL` | Log verbosity: `debug`, `info`, `warn`, `error` (default: `info`) |
+
+The container defaults to mainnet on RPC port 8332.
+
+### 2. Start
+
+```bash
+docker compose up --build -d
+```
+
+### 3. Connect a miner + open dashboard
+
+Same as above — stratum at `stratum+tcp://localhost:3333`, dashboard at [http://localhost:3333](http://localhost:3333).
+
+### 4. Logs & stopping
+
+```bash
+docker compose logs -f
+docker compose down
+```
+
 ## Features
 
 ### Web Dashboard

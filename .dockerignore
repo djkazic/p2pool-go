@@ -1,0 +1,6 @@
+Dockerfile
+docker-compose.yaml
+.env
+.git
+.p2pool
+build/

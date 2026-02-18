@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 
@@ -149,6 +150,9 @@ func (d *Discovery) discoverLoop(ctx context.Context, rd *drouting.RoutingDiscov
 		// Drain the peer channel until it closes.
 		for pi := range peerCh {
 			if pi.ID == d.host.ID() || pi.ID == "" {
+				continue
+			}
+			if d.host.Network().Connectedness(pi.ID) == network.Connected {
 				continue
 			}
 			if err := d.host.Connect(ctx, pi); err != nil {

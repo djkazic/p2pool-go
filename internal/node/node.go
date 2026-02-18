@@ -247,7 +247,7 @@ func (n *Node) eventLoop(ctx context.Context) {
 			if pruned := n.chain.PruneOrphans(); pruned > 0 {
 				n.logger.Info("pruned orphan shares", zap.Int("count", pruned))
 			}
-			n.chain.PruneOldShares(n.config.PPLNSWindowSize * 2)
+			n.chain.PruneToDepth(n.config.PPLNSWindowSize * 2)
 		}
 	}
 }
@@ -1267,7 +1267,6 @@ func (n *Node) submitBlock(header []byte, coinbase []byte, tmpl *bitcoin.BlockTe
 		}
 	}
 }
-
 
 // applyVersionRolling computes the actual block version by merging the miner's
 // rolled version bits into the original job version using the BIP 310 mask.

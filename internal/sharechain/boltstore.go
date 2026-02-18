@@ -246,6 +246,23 @@ func (s *BoltStore) AllHashes() [][32]byte {
 	return hashes
 }
 
+func (s *BoltStore) HashesNotIn(keep map[[32]byte]struct{}) [][32]byte {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Collect hashes that are in the store but not in the keep set
+	toDelete := make([][32]byte, len(s.shares)-len(keep))
+	// Iterate over the whole store and check if the hash is in the keep set.
+	// If not, add it to the list of hashes to delete.
+	//  TODO: This can be obtimized by creating an inex of the store
+	// making this function o(1) instead of o(n)
+	for h := range s.shares {
+		if _, ok := keep[h]; !ok {
+			toDelete = append(toDelete, h)
+		}
+	}
+	return toDelete
+}
 func (s *BoltStore) Close() error {
 	return s.db.Close()
 }
@@ -253,13 +270,13 @@ func (s *BoltStore) Close() error {
 // gobShare is the serialization form for Share. It mirrors types.Share but
 // stores ShareTarget as bytes to avoid gob's issues with nil *big.Int.
 type gobShare struct {
-	Header          types.ShareHeader
-	ShareVersion    uint32
-	PrevShareHash   [32]byte
+	Header           types.ShareHeader
+	ShareVersion     uint32
+	PrevShareHash    [32]byte
 	ShareTargetBytes []byte
-	MinerAddress    string
-	CoinbaseTx      []byte
-	ShareChainNonce uint64
+	MinerAddress     string
+	CoinbaseTx       []byte
+	ShareChainNonce  uint64
 }
 
 func encodeShare(s *types.Share) ([]byte, error) {

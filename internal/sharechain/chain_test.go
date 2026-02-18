@@ -475,7 +475,7 @@ func TestShareChain_PruneOldShares(t *testing.T) {
 	}
 
 	//remove the last 5 minutes of shares (10 shares at 30s intervals)
-	prunedShares := chain.PruneOldShares(chainLen - 10)
+	prunedShares := chain.PruneToDepth(chainLen - 10)
 
 	if prunedShares != 10 {
 		t.Errorf("pruned shares = %d, want 10", prunedShares)

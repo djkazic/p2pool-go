@@ -79,8 +79,7 @@ canvas{width:100%;height:100%}
 <div class="stats">
   <div class="card"><div class="label">Pool Hashrate</div><div class="value accent" id="pool-hashrate">-</div></div>
   <div class="card"><div class="label">Local Hashrate</div><div class="value" id="local-hashrate">-</div></div>
-  <div class="card"><div class="label">Connected Miners</div><div class="value" id="miners">-</div></div>
-  <div class="card"><div class="label">P2P Peers</div><div class="value" id="peers">-</div></div>
+  <div class="card"><div class="label">Miners | Peers</div><div class="value" id="miners-peers">-</div></div>
   <div class="card"><div class="label">Shares</div><div class="value" id="shares">-</div></div>
   <div class="card"><div class="label">Difficulty</div><div class="value" id="difficulty">-</div></div>
   <div class="card"><div class="label">Est. Time to Block</div><div class="value" id="ttb">-</div></div>
@@ -307,8 +306,7 @@ document.getElementById("share-modal").addEventListener("click",function(e){
 function update(data){
   _net=data.network||"";
   document.getElementById("shares").textContent=data.share_count;
-  document.getElementById("miners").textContent=data.miner_count;
-  document.getElementById("peers").textContent=data.peer_count;
+  document.getElementById("miners-peers").textContent=data.miner_count+" | "+data.peer_count;
   document.getElementById("difficulty").textContent=fmtDiff(data.difficulty);
   document.getElementById("pool-hashrate").textContent=fmtHash(data.pool_hashrate);
   document.getElementById("local-hashrate").textContent=fmtHash(data.local_hashrate);

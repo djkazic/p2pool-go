@@ -138,11 +138,6 @@ func (s *BoltStore) Has(hash [32]byte) bool {
 	return ok
 }
 
-func (s *BoltStore) GetByHeight(height int64) (*types.Share, bool) {
-	// BoltStore does not maintain a height index; return not found.
-	return nil, false
-}
-
 func (s *BoltStore) Tip() (*types.Share, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

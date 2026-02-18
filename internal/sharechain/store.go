@@ -12,7 +12,6 @@ type ShareStore interface {
 	Add(share *types.Share) error
 	Get(hash [32]byte) (*types.Share, bool)
 	Has(hash [32]byte) bool
-	GetByHeight(height int64) (*types.Share, bool)
 	Tip() (*types.Share, bool)
 	SetTip(hash [32]byte) error
 	Count() int
@@ -29,7 +28,6 @@ type ShareStore interface {
 type MemoryStore struct {
 	mu      sync.RWMutex
 	shares  map[[32]byte]*types.Share
-	heights map[int64]*types.Share
 	tipHash [32]byte
 	hasTip  bool
 }
@@ -37,8 +35,7 @@ type MemoryStore struct {
 // NewMemoryStore creates a new in-memory share store.
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
-		shares:  make(map[[32]byte]*types.Share),
-		heights: make(map[int64]*types.Share),
+		shares: make(map[[32]byte]*types.Share),
 	}
 }
 
@@ -67,13 +64,6 @@ func (s *MemoryStore) Has(hash [32]byte) bool {
 	defer s.mu.RUnlock()
 	_, ok := s.shares[hash]
 	return ok
-}
-
-func (s *MemoryStore) GetByHeight(height int64) (*types.Share, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	share, ok := s.heights[height]
-	return share, ok
 }
 
 func (s *MemoryStore) Tip() (*types.Share, bool) {
@@ -107,17 +97,8 @@ func (s *MemoryStore) Delete(hash [32]byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	share, ok := s.shares[hash]
-	if !ok {
+	if _, ok := s.shares[hash]; !ok {
 		return fmt.Errorf("share %x not found", hash[:8])
-	}
-
-	// Remove from heights map if present
-	for h, hs := range s.heights {
-		if hs == share {
-			delete(s.heights, h)
-			break
-		}
 	}
 
 	delete(s.shares, hash)

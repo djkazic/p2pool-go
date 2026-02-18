@@ -528,12 +528,21 @@ func TestLocalHashrate(t *testing.T) {
 		t.Error("expected 0 with only 1 share")
 	}
 
-	// Two shares → positive hashrate
-	time.Sleep(10 * time.Millisecond) // ensure distinct timestamps
+	// Two shares close together → 0 (below minElapsed of 30s)
+	time.Sleep(time.Millisecond)
 	n.recordLocalShare(1.0)
+	if n.localHashrate() != 0 {
+		t.Error("expected 0 when elapsed < minElapsed")
+	}
+
+	// Simulate a mature window: backdate the first share so elapsed > 30s
+	n.localSharesMu.Lock()
+	n.localShares[0].time = time.Now().Add(-45 * time.Second)
+	n.localSharesMu.Unlock()
+
 	hr := n.localHashrate()
 	if hr <= 0 {
-		t.Errorf("expected positive hashrate with 2 shares, got %f", hr)
+		t.Errorf("expected positive hashrate with mature window, got %f", hr)
 	}
 }
 

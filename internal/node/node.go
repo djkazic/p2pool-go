@@ -313,11 +313,16 @@ func (n *Node) handleSubmission(sub *stratum.ShareSubmission) {
 	// 5. Check against stratum difficulty (per-miner target).
 	// After a vardiff retarget the miner may still be working at the old
 	// difficulty, so accept shares meeting either current or previous.
+	// Track which difficulty the share actually met for accurate hashrate.
+	acceptedDifficulty := sub.Difficulty
 	stratumTarget := stratumDiffToTarget(sub.Difficulty)
 	meetsTarget := util.HashMeetsTarget(headerHash, stratumTarget)
 	if !meetsTarget && sub.PrevDifficulty > 0 && sub.PrevDifficulty != sub.Difficulty {
 		prevTarget := stratumDiffToTarget(sub.PrevDifficulty)
-		meetsTarget = util.HashMeetsTarget(headerHash, prevTarget)
+		if util.HashMeetsTarget(headerHash, prevTarget) {
+			meetsTarget = true
+			acceptedDifficulty = sub.PrevDifficulty
+		}
 	}
 	if !meetsTarget {
 		n.shareRejectCount++
@@ -344,9 +349,10 @@ func (n *Node) handleSubmission(sub *stratum.ShareSubmission) {
 		zap.String("hash", util.HashToHex(headerHash)),
 	)
 
-	// Record for local hashrate estimation
+	// Record for local hashrate estimation using the difficulty the share
+	// actually met, not the current vardiff (which may have just increased).
 	metrics.SharesAccepted.Inc()
-	n.recordLocalShare(sub.Difficulty)
+	n.recordLocalShare(acceptedDifficulty)
 
 	// 6. Check against sharechain difficulty.
 	// Use the share's actual parent (from coinbase commitment) rather than the
@@ -850,6 +856,12 @@ func (n *Node) recordLocalShare(difficulty float64) {
 func (n *Node) localHashrate() float64 {
 	n.localSharesMu.Lock()
 	defer n.localSharesMu.Unlock()
+	// Require a minimum elapsed window to avoid wildly inflated estimates
+	// from a lucky burst of shares arriving nearly simultaneously.  The
+	// share count minimum is 2 (mathematical minimum); the elapsed floor
+	// of 30 seconds (one share target time) is what actually prevents the
+	// tiny-denominator blowup.
+	const minElapsed = 30.0 // seconds
 	if len(n.localShares) < 2 {
 		return 0
 	}
@@ -860,7 +872,7 @@ func (n *Node) localHashrate() float64 {
 		totalDiff += e.difficulty
 	}
 	elapsed := n.localShares[len(n.localShares)-1].time.Sub(n.localShares[0].time).Seconds()
-	if elapsed <= 0 {
+	if elapsed < minElapsed {
 		return 0
 	}
 	return totalDiff * math.Pow(2, 32) / elapsed

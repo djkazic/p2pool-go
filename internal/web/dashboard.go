@@ -55,8 +55,11 @@ tr.golden td.hash:hover{color:#f0c040}
 @media(max-width:900px){.graph-grid{grid-template-columns:1fr}}
 .graph-card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:20px}
 .graph-card h2{font-size:0.9rem;font-weight:600;color:#f0f6fc;margin-bottom:12px}
-.graph-wrap{position:relative;width:100%;height:160px}
+.graph-wrap{position:relative;width:100%;height:180px;cursor:crosshair}
 canvas{width:100%;height:100%}
+.graph-tooltip{position:fixed;background:#1c2128;border:1px solid #30363d;border-radius:6px;padding:8px 10px;font-size:0.75rem;font-family:"SF Mono",SFMono-Regular,Consolas,"Liberation Mono",Menlo,monospace;color:#c9d1d9;pointer-events:none;z-index:50;white-space:nowrap;display:none;box-shadow:0 4px 12px rgba(0,0,0,0.4)}
+.graph-tooltip .tt-val{color:#f0f6fc;font-weight:600}
+.graph-tooltip .tt-time{color:#8b949e;font-size:0.65rem}
 
 /* Share detail modal */
 .modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:100;justify-content:center;align-items:center}
@@ -133,6 +136,8 @@ canvas{width:100%;height:100%}
   </div>
 </div>
 
+<div class="graph-tooltip" id="graph-tooltip"></div>
+
 <script>
 /* ---- Utility functions ---- */
 function timeAgo(ts){
@@ -198,15 +203,67 @@ function fmtTimestamp(ts){
   return new Date(ts*1000).toLocaleString();
 }
 
-/* ---- Graph history (ring buffers) ---- */
+/* ---- Graph history (ring buffers, stores {t:timestamp, v:value}) ---- */
 var MAX_POINTS=60;
 var histHashrate=[];
 var histShares=[];
 var histSeeded=false;
-function pushHistory(arr,val){arr.push(val);if(arr.length>MAX_POINTS)arr.shift();}
+function pushHistory(arr,t,v){arr.push({t:t,v:v});if(arr.length>MAX_POINTS)arr.shift();}
 
-/* ---- Canvas graph renderer ---- */
-function drawGraph(canvasId,data,color,formatter){
+/* ---- Canvas graph renderer with hover support ---- */
+var graphState={};
+
+function initGraph(canvasId,color,formatter){
+  var canvas=document.getElementById(canvasId);
+  if(!canvas)return;
+  var wrap=canvas.parentElement;
+  graphState[canvasId]={color:color,formatter:formatter,hoverIdx:-1};
+
+  wrap.addEventListener("mousemove",function(e){
+    var st=graphState[canvasId];
+    var data=canvasId==="graph-hashrate"?histHashrate:histShares;
+    if(data.length<2)return;
+    var rect=wrap.getBoundingClientRect();
+    var mx=e.clientX-rect.left;
+    var W=rect.width;
+    var max=0;
+    for(var i=0;i<data.length;i++){if(data[i].v>max)max=data[i].v;}
+    if(max===0)max=1;
+    max*=1.1;
+    var ctx=canvas.getContext("2d");
+    ctx.font="10px monospace";
+    var maxLW=0;
+    for(var g=0;g<=4;g++){var lw=ctx.measureText(st.formatter(max*g/4)).width;if(lw>maxLW)maxLW=lw;}
+    var padLeft=Math.max(maxLW+14,40),padRight=12;
+    var gW=W-padLeft-padRight;
+    var idx=Math.round((mx-padLeft)/gW*(data.length-1));
+    idx=Math.max(0,Math.min(data.length-1,idx));
+    st.hoverIdx=idx;
+    drawGraph(canvasId);
+    var tooltip=document.getElementById("graph-tooltip");
+    var pt=data[idx];
+    var timeStr=pt.t?new Date(pt.t*1000).toLocaleTimeString():"";
+    tooltip.innerHTML='<span class="tt-val">'+esc(st.formatter(pt.v))+'</span><br><span class="tt-time">'+esc(timeStr)+'</span>';
+    tooltip.style.display="block";
+    var tx=e.clientX+14,ty=e.clientY-40;
+    if(tx+150>window.innerWidth)tx=e.clientX-164;
+    if(ty<0)ty=e.clientY+14;
+    tooltip.style.left=tx+"px";
+    tooltip.style.top=ty+"px";
+  });
+
+  wrap.addEventListener("mouseleave",function(){
+    graphState[canvasId].hoverIdx=-1;
+    drawGraph(canvasId);
+    document.getElementById("graph-tooltip").style.display="none";
+  });
+}
+
+function drawGraph(canvasId){
+  var st=graphState[canvasId];
+  if(!st)return;
+  var data=canvasId==="graph-hashrate"?histHashrate:histShares;
+  var color=st.color,formatter=st.formatter,hoverIdx=st.hoverIdx;
   var canvas=document.getElementById(canvasId);
   if(!canvas)return;
   var ctx=canvas.getContext("2d");
@@ -219,52 +276,76 @@ function drawGraph(canvasId,data,color,formatter){
   ctx.clearRect(0,0,W,H);
   if(data.length<2)return;
 
-  var max=0;for(var i=0;i<data.length;i++){if(data[i]>max)max=data[i];}
+  var max=0;
+  for(var i=0;i<data.length;i++){if(data[i].v>max)max=data[i].v;}
   if(max===0)max=1;
-  var pad=24;
-  var gW=W-pad,gH=H-pad;
+  max*=1.1;
 
-  // Grid lines
-  ctx.strokeStyle="#21262d";
-  ctx.lineWidth=1;
-  for(var g=0;g<=4;g++){
-    var gy=pad/2+gH*(1-g/4);
-    ctx.beginPath();ctx.moveTo(pad,gy);ctx.lineTo(W,gy);ctx.stroke();
-  }
-
-  // Y-axis labels
-  ctx.fillStyle="#484f58";
+  // Dynamic left padding based on widest Y-axis label
   ctx.font="10px monospace";
-  ctx.textAlign="right";
+  var maxLW=0;
+  for(var g=0;g<=4;g++){var lw=ctx.measureText(formatter(max*g/4)).width;if(lw>maxLW)maxLW=lw;}
+  var padLeft=Math.max(maxLW+14,40),padRight=12,padTop=22,padBottom=22;
+  var gW=W-padLeft-padRight,gH=H-padTop-padBottom;
+
+  // Grid lines + Y-axis labels
+  ctx.strokeStyle="#21262d";ctx.lineWidth=1;
+  ctx.fillStyle="#484f58";ctx.textAlign="right";ctx.textBaseline="middle";
   for(var g=0;g<=4;g++){
-    var gy=pad/2+gH*(1-g/4);
-    ctx.fillText(formatter(max*g/4),pad-4,gy+3);
+    var gy=padTop+gH*(1-g/4);
+    ctx.beginPath();ctx.moveTo(padLeft,gy);ctx.lineTo(W-padRight,gy);ctx.stroke();
+    ctx.fillText(formatter(max*g/4),padLeft-6,gy);
   }
+
+  // X-axis time labels
+  ctx.fillStyle="#484f58";ctx.textAlign="center";ctx.textBaseline="top";
+  var numLabels=Math.min(5,data.length);
+  if(numLabels>=2){
+    for(var i=0;i<numLabels;i++){
+      var di=Math.round(i*(data.length-1)/(numLabels-1));
+      var x=padLeft+(di/(data.length-1))*gW;
+      var t=data[di].t;
+      if(t){
+        var d=new Date(t*1000);
+        ctx.fillText(d.getHours().toString().padStart(2,"0")+":"+d.getMinutes().toString().padStart(2,"0"),x,padTop+gH+5);
+      }
+    }
+  }
+
+  function getX(i){return padLeft+(i/(data.length-1))*gW;}
+  function getY(v){return padTop+gH*(1-v/max);}
 
   // Data line
-  ctx.strokeStyle=color;
-  ctx.lineWidth=2;
-  ctx.lineJoin="round";
+  ctx.strokeStyle=color;ctx.lineWidth=2;ctx.lineJoin="round";
   ctx.beginPath();
   for(var i=0;i<data.length;i++){
-    var x=pad+(i/(data.length-1))*gW;
-    var y=pad/2+gH*(1-data[i]/max);
+    var x=getX(i),y=getY(data[i].v);
     if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
   }
   ctx.stroke();
 
   // Fill under line
-  ctx.lineTo(pad+gW,pad/2+gH);
-  ctx.lineTo(pad,pad/2+gH);
+  ctx.lineTo(getX(data.length-1),padTop+gH);
+  ctx.lineTo(padLeft,padTop+gH);
   ctx.closePath();
   ctx.fillStyle=color.replace("1)","0.08)");
   ctx.fill();
 
-  // Current value
-  ctx.fillStyle=color;
-  ctx.font="bold 11px monospace";
-  ctx.textAlign="right";
-  ctx.fillText(formatter(data[data.length-1]),W-4,14);
+  // Current value (top right, above graph area)
+  ctx.fillStyle=color;ctx.font="bold 11px monospace";
+  ctx.textAlign="right";ctx.textBaseline="top";
+  ctx.fillText(formatter(data[data.length-1].v),W-padRight,4);
+
+  // Hover crosshair + dot
+  if(hoverIdx>=0&&hoverIdx<data.length){
+    var hx=getX(hoverIdx),hy=getY(data[hoverIdx].v);
+    ctx.strokeStyle="#484f58";ctx.lineWidth=1;ctx.setLineDash([4,4]);
+    ctx.beginPath();ctx.moveTo(hx,padTop);ctx.lineTo(hx,padTop+gH);ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath();ctx.arc(hx,hy,4,0,Math.PI*2);
+    ctx.fillStyle=color;ctx.fill();
+    ctx.strokeStyle="#0d1117";ctx.lineWidth=2;ctx.stroke();
+  }
 }
 
 /* ---- Share detail modal ---- */
@@ -356,16 +437,17 @@ function update(data){
   if(!histSeeded&&data.history&&data.history.length>0){
     histHashrate=[];histShares=[];
     for(var i=0;i<data.history.length;i++){
-      histHashrate.push(data.history[i].ph);
-      histShares.push(data.history[i].sc);
+      histHashrate.push({t:data.history[i].t,v:data.history[i].ph});
+      histShares.push({t:data.history[i].t,v:data.history[i].sc});
     }
     histSeeded=true;
   }else{
-    pushHistory(histHashrate,data.pool_hashrate||0);
-    pushHistory(histShares,data.share_count||0);
+    var now=Math.floor(Date.now()/1000);
+    pushHistory(histHashrate,now,data.pool_hashrate||0);
+    pushHistory(histShares,now,data.share_count||0);
   }
-  drawGraph("graph-hashrate",histHashrate,"rgba(88,166,255,1)",fmtHash);
-  drawGraph("graph-shares",histShares,"rgba(63,185,80,1)",function(v){return Math.round(v).toString();});
+  drawGraph("graph-hashrate");
+  drawGraph("graph-shares");
 }
 
 function poll(){
@@ -374,10 +456,14 @@ function poll(){
 poll();
 setInterval(poll,5000);
 
+// Initialize graph hover handlers
+initGraph("graph-hashrate","rgba(88,166,255,1)",fmtHash);
+initGraph("graph-shares","rgba(63,185,80,1)",function(v){return Math.round(v).toString();});
+
 // Redraw graphs on resize
 window.addEventListener("resize",function(){
-  drawGraph("graph-hashrate",histHashrate,"rgba(88,166,255,1)",fmtHash);
-  drawGraph("graph-shares",histShares,"rgba(63,185,80,1)",function(v){return Math.round(v).toString();});
+  drawGraph("graph-hashrate");
+  drawGraph("graph-shares");
 });
 </script>
 </body>

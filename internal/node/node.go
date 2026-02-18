@@ -844,8 +844,10 @@ func (n *Node) localHashrate() float64 {
 	if len(n.localShares) < 2 {
 		return 0
 	}
+	// Sum difficulty of all shares except the first — the first share's work
+	// was done before the measurement window, so including it inflates the rate.
 	var totalDiff float64
-	for _, e := range n.localShares {
+	for _, e := range n.localShares[1:] {
 		totalDiff += e.difficulty
 	}
 	elapsed := n.localShares[len(n.localShares)-1].time.Sub(n.localShares[0].time).Seconds()

@@ -220,7 +220,7 @@ func TestValidateMinerInOutputs_Missing(t *testing.T) {
 
 	// Validate with a different address — construct a different scriptPubKey manually
 	// Use a different valid testnet address
-	differentAddr := "tb1qllllllllllllllllllllllllllllllllllllll"
+	differentAddr := "tb1qqqqqp399et2xygdj5xreqhjjvcmzhxw4aywxecjdzew6hylgvsesrxh6hy"
 	err = ValidateMinerInOutputs(outputs, differentAddr, "testnet3")
 	if err == nil {
 		t.Error("expected error when miner address not in outputs")
@@ -232,6 +232,24 @@ func TestValidateAddress(t *testing.T) {
 	err := ValidateAddress("tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx", "testnet3")
 	if err != nil {
 		t.Errorf("ValidateAddress failed for valid address: %v", err)
+	}
+
+	// Valid testnet P2WSH address
+	err = ValidateAddress("tb1qqqqqp399et2xygdj5xreqhjjvcmzhxw4aywxecjdzew6hylgvsesrxh6hy", "testnet3")
+	if err != nil {
+		t.Errorf("ValidateAddress failed for valid P2WSH address: %v", err)
+	}
+
+	// Valid mainnet address
+	err = ValidateAddress("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4", "mainnet")
+	if err != nil {
+		t.Errorf("ValidateAddress failed for valid mainnet address: %v", err)
+	}
+
+	// Invalid checksum (last char changed)
+	err = ValidateAddress("tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx"[:len("tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx")-1]+"q", "testnet3")
+	if err == nil {
+		t.Error("expected error for invalid bech32 checksum")
 	}
 
 	// Invalid address

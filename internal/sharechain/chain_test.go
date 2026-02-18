@@ -15,7 +15,7 @@ import (
 const (
 	testNetwork = "testnet3"
 	testMiner1  = "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx"
-	testMiner2  = "tb1qllllllllllllllllllllllllllllllllllllll"
+	testMiner2  = "tb1qqqqqp399et2xygdj5xreqhjjvcmzhxw4aywxecjdzew6hylgvsesrxh6hy"
 )
 
 func testLogger() *zap.Logger {

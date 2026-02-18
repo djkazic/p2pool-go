@@ -195,9 +195,9 @@ func bech32AddressToScript(address string) ([]byte, error) {
 	return script, nil
 }
 
-// bech32Decode decodes a bech32 string. Minimal implementation for address parsing.
+// bech32Decode decodes a bech32/bech32m string with full checksum verification.
 func bech32Decode(s string) (string, []byte, error) {
-	// Find separator
+	// Find separator (last occurrence of '1')
 	sepIdx := -1
 	for i := len(s) - 1; i >= 0; i-- {
 		if s[i] == '1' {
@@ -231,13 +231,58 @@ func bech32Decode(s string) (string, []byte, error) {
 		data[i] = val
 	}
 
-	// Strip checksum (last 6 characters)
 	if len(data) < 6 {
 		return "", nil, fmt.Errorf("bech32 data too short")
 	}
+
+	// Verify checksum
+	check := bech32Polymod(bech32HRPExpand(hrp), data)
+	if check != 1 && check != 0x2bc830a3 {
+		return "", nil, fmt.Errorf("invalid bech32 checksum")
+	}
+
+	// Strip checksum (last 6 characters)
 	data = data[:len(data)-6]
 
 	return hrp, data, nil
+}
+
+// bech32Polymod computes the bech32 polynomial checksum over the HRP expansion and data.
+func bech32Polymod(hrpExp []byte, data []byte) uint32 {
+	gen := [5]uint32{0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3}
+	chk := uint32(1)
+	for _, v := range hrpExp {
+		b := chk >> 25
+		chk = (chk&0x1ffffff)<<5 ^ uint32(v)
+		for i := 0; i < 5; i++ {
+			if (b>>uint(i))&1 == 1 {
+				chk ^= gen[i]
+			}
+		}
+	}
+	for _, v := range data {
+		b := chk >> 25
+		chk = (chk&0x1ffffff)<<5 ^ uint32(v)
+		for i := 0; i < 5; i++ {
+			if (b>>uint(i))&1 == 1 {
+				chk ^= gen[i]
+			}
+		}
+	}
+	return chk
+}
+
+// bech32HRPExpand expands the HRP for checksum computation.
+func bech32HRPExpand(hrp string) []byte {
+	ret := make([]byte, 0, len(hrp)*2+1)
+	for _, c := range hrp {
+		ret = append(ret, byte(c>>5))
+	}
+	ret = append(ret, 0)
+	for _, c := range hrp {
+		ret = append(ret, byte(c&31))
+	}
+	return ret
 }
 
 // convertBits converts between bit groups.

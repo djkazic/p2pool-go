@@ -33,8 +33,17 @@ type StatusData struct {
 	LastBlockFoundTime int64          `json:"last_block_found_time"`
 	LastBlockFoundHash string         `json:"last_block_found_hash"`
 	EstTimeToBlock     int64          `json:"est_time_to_block"`
-	History            []HistoryPoint `json:"history"`
-	OurAddress         string         `json:"our_address"`
+	History            []HistoryPoint      `json:"history"`
+	OurAddress         string              `json:"our_address"`
+	PayoutEntries      []PayoutInfo        `json:"payout_entries"`
+	CoinbaseValue      int64               `json:"coinbase_value"`
+}
+
+// PayoutInfo describes a single payout output for the dashboard.
+type PayoutInfo struct {
+	Address string  `json:"address"`
+	Amount  int64   `json:"amount"`
+	Pct     float64 `json:"pct"`
 }
 
 // ShareInfo describes a single share for the dashboard.

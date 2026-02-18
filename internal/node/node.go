@@ -936,6 +936,8 @@ func (n *Node) dashboardData() *web.StatusData {
 	}
 
 	minerWeights := make(map[string]float64)
+	var payoutEntries []web.PayoutInfo
+	var coinbaseValue int64
 	if len(pplnsAncestors) > 0 {
 		window := pplns.NewWindow(pplnsAncestors, sharechain.MaxShareTarget)
 		weights := window.MinerWeights()
@@ -946,6 +948,23 @@ func (n *Node) dashboardData() *web.StatusData {
 				wF := new(big.Float).SetInt(w)
 				pct, _ := new(big.Float).Quo(wF, totalF).Float64()
 				minerWeights[addr] = pct * 100
+			}
+		}
+
+		// Compute concrete payout amounts for Sankey diagram
+		if tmpl := n.workGen.CurrentTemplate(); tmpl != nil {
+			coinbaseValue = tmpl.CoinbaseValue
+			payouts := n.pplnsCalc.CalculatePayouts(window, coinbaseValue, n.minerAddress)
+			for _, p := range payouts {
+				pct := 0.0
+				if coinbaseValue > 0 {
+					pct = float64(p.Amount) / float64(coinbaseValue) * 100
+				}
+				payoutEntries = append(payoutEntries, web.PayoutInfo{
+					Address: p.Address,
+					Amount:  p.Amount,
+					Pct:     pct,
+				})
 			}
 		}
 	}
@@ -1006,6 +1025,8 @@ func (n *Node) dashboardData() *web.StatusData {
 		EstTimeToBlock:     estTimeToBlock,
 		History:            n.getGraphHistory(),
 		OurAddress:         n.minerAddress,
+		PayoutEntries:      payoutEntries,
+		CoinbaseValue:      coinbaseValue,
 	}
 }
 

@@ -9,71 +9,82 @@ const dashboardHTML = `<!DOCTYPE html>
 <title>p2pool Dashboard</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#0d1117;color:#c9d1d9;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;padding:24px;min-height:100vh}
-h1{font-size:1.5rem;font-weight:600;color:#f0f6fc;margin-bottom:4px}
-.subtitle{color:#8b949e;font-size:0.85rem;margin-bottom:24px}
-.subtitle span{color:#58a6ff}
+body{background:#050a05;color:#20cc20;font-family:"SF Mono",SFMono-Regular,Consolas,"Liberation Mono",Menlo,monospace;padding:24px;min-height:100vh;animation:flicker 4s infinite}
+h1{font-size:1.5rem;font-weight:600;color:#33ff33;margin-bottom:4px;text-shadow:0 0 8px rgba(51,255,51,0.4),0 0 20px rgba(51,255,51,0.15)}
+.subtitle{color:#1a9a1a;font-size:0.85rem;margin-bottom:24px}
+.subtitle span{color:#33ff33}
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px}
-.card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:20px}
-.card .label{color:#8b949e;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px}
-.card .value{font-size:1.75rem;font-weight:700;color:#f0f6fc;font-family:"SF Mono",SFMono-Regular,Consolas,"Liberation Mono",Menlo,monospace}
-.card .value.accent{color:#58a6ff}
+.card{background:#0a120a;border:1px solid #0f2a0f;border-radius:8px;padding:20px}
+.card .label{color:#1a9a1a;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px}
+.card .value{font-size:1.75rem;font-weight:700;color:#33ff33;font-family:"SF Mono",SFMono-Regular,Consolas,"Liberation Mono",Menlo,monospace;text-shadow:0 0 8px rgba(51,255,51,0.4),0 0 20px rgba(51,255,51,0.15)}
+.card .value.accent{color:#33ff33}
 .section{margin-bottom:24px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
 @media(max-width:900px){.grid2{grid-template-columns:1fr}}
-.card h2{font-size:0.9rem;font-weight:600;color:#f0f6fc;margin-bottom:12px}
+.card h2{font-size:0.9rem;font-weight:600;color:#33ff33;margin-bottom:12px;text-shadow:0 0 8px rgba(51,255,51,0.4),0 0 20px rgba(51,255,51,0.15)}
 table{width:100%;border-collapse:collapse}
-th{text-align:left;color:#8b949e;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.5px;padding:6px 8px;border-bottom:1px solid #30363d}
-td{padding:8px;font-size:0.8rem;border-bottom:1px solid #21262d;font-family:"SF Mono",SFMono-Regular,Consolas,"Liberation Mono",Menlo,monospace}
+th{text-align:left;color:#1a9a1a;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.5px;padding:6px 8px;border-bottom:1px solid #0f2a0f}
+td{padding:8px;font-size:0.8rem;border-bottom:1px solid #0a1f0a;font-family:"SF Mono",SFMono-Regular,Consolas,"Liberation Mono",Menlo,monospace}
 td.miner{word-break:break-all;white-space:normal}
-td.miner.other a.addr{color:#6e7681}
-td.hash{color:#8b949e;cursor:pointer;word-break:break-all;white-space:normal;width:45%}
-td.hash:hover{color:#58a6ff;text-decoration:underline}
-a.addr{color:#58a6ff;text-decoration:none;word-break:break-all}
+td.miner.other a.addr{color:#157a15}
+td.hash{color:#1a9a1a;cursor:pointer;word-break:break-all;white-space:normal;width:45%}
+td.hash:hover{color:#55ff55;text-decoration:underline}
+a.addr{color:#33ff33;text-decoration:none;word-break:break-all}
 a.addr:hover{text-decoration:underline}
-td.time{color:#c9d1d9;white-space:nowrap}
+td.time{color:#20cc20;white-space:nowrap}
 /* Golden share (Bitcoin block found) */
-tr.golden td{background:rgba(187,128,9,0.08)}
-tr.golden td.hash{color:#e3b341}
-tr.golden td.hash:hover{color:#f0c040}
-.golden-badge{display:inline-block;background:#e3b341;color:#0d1117;font-size:0.6rem;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:6px;vertical-align:middle;letter-spacing:0.3px}
-.bar-chart{display:flex;flex-direction:column;gap:8px}
-.bar-row{display:flex;align-items:center;gap:10px}
-.bar-label{font-size:0.75rem;font-family:"SF Mono",SFMono-Regular,Consolas,"Liberation Mono",Menlo,monospace;min-width:120px;max-width:260px;word-break:break-all}
-.bar-label a.addr{font-size:inherit}
-.bar-track{flex:1;background:#21262d;border-radius:4px;height:20px;overflow:hidden}
-.bar-fill{height:100%;background:linear-gradient(90deg,#1f6feb,#58a6ff);border-radius:4px;transition:width 0.4s ease}
-.bar-pct{font-size:0.75rem;color:#8b949e;min-width:50px;text-align:right;font-family:"SF Mono",SFMono-Regular,Consolas,"Liberation Mono",Menlo,monospace}
+tr.golden td{background:rgba(255,176,0,0.08)}
+tr.golden td.hash{color:#ffaa00}
+tr.golden td.hash:hover{color:#ffcc33}
+.golden-badge{display:inline-block;background:#ffaa00;color:#050a05;font-size:0.6rem;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:6px;vertical-align:middle;letter-spacing:0.3px;text-shadow:none}
+.sankey-wrap{position:relative;width:100%;min-height:120px}
+.sankey-wrap canvas{width:100%;height:100%}
+.sankey-tooltip{position:fixed;background:#0d160d;border:1px solid #0f2a0f;border-radius:6px;padding:8px 10px;font-size:0.75rem;font-family:"SF Mono",SFMono-Regular,Consolas,"Liberation Mono",Menlo,monospace;color:#20cc20;pointer-events:none;z-index:50;white-space:nowrap;display:none;box-shadow:0 4px 12px rgba(0,10,0,0.5)}
+.sankey-tooltip .st-addr{color:#33ff33}
+.sankey-tooltip .st-amt{color:#33ff33;font-weight:600}
+.sankey-tooltip .st-pct{color:#1a9a1a}
+.payout-table{margin-top:16px;border-top:1px solid #0a1f0a}
+.payout-table th{text-align:left;color:#1a9a1a;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.5px;padding:8px 8px 4px}
+.payout-table td{padding:4px 8px;font-size:0.75rem;border:none;font-family:"SF Mono",SFMono-Regular,Consolas,"Liberation Mono",Menlo,monospace}
+.payout-table th:last-child,.payout-table td:last-child{text-align:right}
+.payout-table th:nth-child(2),.payout-table td:nth-child(2){text-align:right}
 .info{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;margin-top:12px}
-.info-item{font-size:0.75rem;color:#8b949e}
-.info-item span{color:#c9d1d9}
-.no-data{color:#484f58;font-size:0.85rem;font-style:italic;padding:16px 0}
-.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#3fb950;margin-right:6px;animation:pulse 2s infinite}
+.info-item{font-size:0.75rem;color:#1a9a1a}
+.info-item span{color:#20cc20}
+.no-data{color:#0f5f0f;font-size:0.85rem;font-style:italic;padding:16px 0}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#33ff33;margin-right:6px;animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
 
 /* Graphs */
 .graph-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
 @media(max-width:900px){.graph-grid{grid-template-columns:1fr}}
-.graph-card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:20px}
-.graph-card h2{font-size:0.9rem;font-weight:600;color:#f0f6fc;margin-bottom:12px}
+.graph-card{background:#0a120a;border:1px solid #0f2a0f;border-radius:8px;padding:20px}
+.graph-card h2{font-size:0.9rem;font-weight:600;color:#33ff33;margin-bottom:12px;text-shadow:0 0 8px rgba(51,255,51,0.4),0 0 20px rgba(51,255,51,0.15)}
 .graph-wrap{position:relative;width:100%;height:180px;cursor:crosshair}
 canvas{width:100%;height:100%}
-.graph-tooltip{position:fixed;background:#1c2128;border:1px solid #30363d;border-radius:6px;padding:8px 10px;font-size:0.75rem;font-family:"SF Mono",SFMono-Regular,Consolas,"Liberation Mono",Menlo,monospace;color:#c9d1d9;pointer-events:none;z-index:50;white-space:nowrap;display:none;box-shadow:0 4px 12px rgba(0,0,0,0.4)}
-.graph-tooltip .tt-val{color:#f0f6fc;font-weight:600}
-.graph-tooltip .tt-time{color:#8b949e;font-size:0.65rem}
+.graph-tooltip{position:fixed;background:#0d160d;border:1px solid #0f2a0f;border-radius:6px;padding:8px 10px;font-size:0.75rem;font-family:"SF Mono",SFMono-Regular,Consolas,"Liberation Mono",Menlo,monospace;color:#20cc20;pointer-events:none;z-index:50;white-space:nowrap;display:none;box-shadow:0 4px 12px rgba(0,10,0,0.5)}
+.graph-tooltip .tt-val{color:#33ff33;font-weight:600}
+.graph-tooltip .tt-time{color:#1a9a1a;font-size:0.65rem}
 
 /* Share detail modal */
-.modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:100;justify-content:center;align-items:center}
+.modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:100;justify-content:center;align-items:center}
 .modal-overlay.open{display:flex}
-.modal{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:24px;max-width:600px;width:90%;max-height:80vh;overflow-y:auto}
-.modal h2{font-size:1.1rem;font-weight:600;color:#f0f6fc;margin-bottom:16px}
-.modal .close-btn{float:right;background:none;border:none;color:#8b949e;font-size:1.2rem;cursor:pointer;padding:4px 8px}
-.modal .close-btn:hover{color:#f0f6fc}
+.modal{background:#0a120a;border:1px solid #0f2a0f;border-radius:12px;padding:24px;max-width:600px;width:90%;max-height:80vh;overflow-y:auto}
+.modal h2{font-size:1.1rem;font-weight:600;color:#33ff33;margin-bottom:16px;text-shadow:0 0 8px rgba(51,255,51,0.4),0 0 20px rgba(51,255,51,0.15)}
+.modal .close-btn{float:right;background:none;border:none;color:#1a9a1a;font-size:1.2rem;cursor:pointer;padding:4px 8px}
+.modal .close-btn:hover{color:#33ff33}
 .modal dl{display:grid;grid-template-columns:auto 1fr;gap:6px 12px}
-.modal dt{color:#8b949e;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.5px;padding-top:4px}
+.modal dt{color:#1a9a1a;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.5px;padding-top:4px}
 .modal dd{font-family:"SF Mono",SFMono-Regular,Consolas,"Liberation Mono",Menlo,monospace;font-size:0.8rem;word-break:break-all;padding:4px 0}
-.modal dd.golden{color:#e3b341;font-weight:600}
-.modal .loading{color:#484f58;font-style:italic;padding:20px 0;text-align:center}
+.modal dd.golden{color:#ffaa00;font-weight:600;text-shadow:0 0 8px rgba(255,170,0,0.4),0 0 20px rgba(255,170,0,0.15)}
+.modal .loading{color:#0f5f0f;font-style:italic;padding:20px 0;text-align:center}
+
+/* CRT scanlines */
+body::before{content:"";position:fixed;top:0;left:0;width:100%;height:100%;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.15) 2px,rgba(0,0,0,0.15) 4px);pointer-events:none;z-index:9999}
+/* CRT vignette */
+body::after{content:"";position:fixed;top:0;left:0;width:100%;height:100%;background:radial-gradient(ellipse at center,transparent 60%,rgba(0,0,0,0.6) 100%);pointer-events:none;z-index:9998}
+/* CRT flicker */
+@keyframes flicker{0%{opacity:1}3%{opacity:0.985}6%{opacity:1}42%{opacity:1}44%{opacity:0.975}46%{opacity:1}82%{opacity:1}84%{opacity:0.98}86%{opacity:1}100%{opacity:1}}
 </style>
 </head>
 <body>
@@ -110,8 +121,13 @@ canvas{width:100%;height:100%}
     </table>
   </div>
   <div class="card">
-    <h2>PPLNS Distribution</h2>
-    <div class="bar-chart" id="pplns-chart"><div class="no-data">No data yet</div></div>
+    <h2>Payout Details</h2>
+    <div class="sankey-wrap" id="sankey-wrap"><canvas id="sankey-canvas"></canvas></div>
+    <div class="no-data" id="sankey-nodata">No data yet</div>
+    <table class="payout-table" id="payout-table" style="display:none">
+      <thead><tr><th>Address</th><th>Amount</th><th>%</th></tr></thead>
+      <tbody id="payout-tbody"></tbody>
+    </table>
   </div>
 </div>
 
@@ -138,6 +154,7 @@ canvas{width:100%;height:100%}
 </div>
 
 <div class="graph-tooltip" id="graph-tooltip"></div>
+<div class="sankey-tooltip" id="sankey-tooltip"></div>
 
 <script>
 /* ---- Utility functions ---- */
@@ -202,6 +219,10 @@ function fmtDuration(s){
 function fmtTimestamp(ts){
   if(!ts)return"-";
   return new Date(ts*1000).toLocaleString();
+}
+function fmtBtc(sats){
+  if(!sats)return"0 BTC";
+  return(sats/1e8).toFixed(8)+" BTC";
 }
 
 /* ---- Graph history (ring buffers, stores {t:timestamp, v:value}) ---- */
@@ -290,8 +311,8 @@ function drawGraph(canvasId){
   var gW=W-padLeft-padRight,gH=H-padTop-padBottom;
 
   // Grid lines + Y-axis labels
-  ctx.strokeStyle="#21262d";ctx.lineWidth=1;
-  ctx.fillStyle="#484f58";ctx.textAlign="right";ctx.textBaseline="middle";
+  ctx.strokeStyle="#0a1f0a";ctx.lineWidth=1;
+  ctx.fillStyle="#0f5f0f";ctx.textAlign="right";ctx.textBaseline="middle";
   for(var g=0;g<=4;g++){
     var gy=padTop+gH*(1-g/4);
     ctx.beginPath();ctx.moveTo(padLeft,gy);ctx.lineTo(W-padRight,gy);ctx.stroke();
@@ -299,7 +320,7 @@ function drawGraph(canvasId){
   }
 
   // X-axis time labels
-  ctx.fillStyle="#484f58";ctx.textAlign="center";ctx.textBaseline="top";
+  ctx.fillStyle="#0f5f0f";ctx.textAlign="center";ctx.textBaseline="top";
   var numLabels=Math.min(5,data.length);
   if(numLabels>=2){
     for(var i=0;i<numLabels;i++){
@@ -340,14 +361,245 @@ function drawGraph(canvasId){
   // Hover crosshair + dot
   if(hoverIdx>=0&&hoverIdx<data.length){
     var hx=getX(hoverIdx),hy=getY(data[hoverIdx].v);
-    ctx.strokeStyle="#484f58";ctx.lineWidth=1;ctx.setLineDash([4,4]);
+    ctx.strokeStyle="#0f5f0f";ctx.lineWidth=1;ctx.setLineDash([4,4]);
     ctx.beginPath();ctx.moveTo(hx,padTop);ctx.lineTo(hx,padTop+gH);ctx.stroke();
     ctx.setLineDash([]);
     ctx.beginPath();ctx.arc(hx,hy,4,0,Math.PI*2);
     ctx.fillStyle=color;ctx.fill();
-    ctx.strokeStyle="#0d1117";ctx.lineWidth=2;ctx.stroke();
+    ctx.strokeStyle="#050a05";ctx.lineWidth=2;ctx.stroke();
   }
 }
+
+/* ---- Sankey diagram for payout details ---- */
+var sankeyPayouts=[];
+var sankeyHoverIdx=-1;
+
+function drawSankey(){
+  var canvas=document.getElementById("sankey-canvas");
+  var wrap=document.getElementById("sankey-wrap");
+  var nodata=document.getElementById("sankey-nodata");
+  if(!canvas||!wrap)return;
+  var entries=sankeyPayouts;
+  if(!entries||entries.length===0){
+    canvas.style.display="none";
+    nodata.style.display="";
+    return;
+  }
+  canvas.style.display="";
+  nodata.style.display="none";
+
+  // Size canvas: row height based on entry count
+  var rowH=Math.max(28,Math.min(40,200/entries.length));
+  var gap=4;
+  var totalH=entries.length*rowH+(entries.length-1)*gap;
+  var minH=Math.max(totalH+24,120);
+  wrap.style.height=minH+"px";
+
+  var ctx=canvas.getContext("2d");
+  var dpr=window.devicePixelRatio||1;
+  var rect=wrap.getBoundingClientRect();
+  canvas.width=rect.width*dpr;
+  canvas.height=rect.height*dpr;
+  ctx.scale(dpr,dpr);
+  var W=rect.width,H=rect.height;
+  ctx.clearRect(0,0,W,H);
+
+  // Layout: left node (block reward) -> flows -> right nodes (addresses)
+  var nodeW=12;
+  ctx.font="10px monospace";
+  var leftLblW=Math.max(ctx.measureText("Block").width,ctx.measureText("Reward").width);
+  var leftX=Math.ceil(leftLblW/2-nodeW/2)+2;
+  var rightX=W-nodeW;
+  var flowLeft=leftX+nodeW,flowRight=rightX;
+  var addrLabelPad=8;
+
+  // Measure address label widths to set right node position
+  ctx.font="11px monospace";
+  var maxLabelW=0;
+  for(var i=0;i<entries.length;i++){
+    var lbl=entries[i].address.length>24?entries[i].address.substring(0,12)+"..."+entries[i].address.slice(-8):entries[i].address;
+    entries[i]._label=lbl;
+    var lw=ctx.measureText(lbl).width;
+    // Also measure amount
+    var amtStr=fmtBtc(entries[i].amount);
+    entries[i]._amtStr=amtStr;
+    var aw=ctx.measureText(amtStr).width;
+    var tw=Math.max(lw,aw);
+    if(tw>maxLabelW)maxLabelW=tw;
+  }
+  rightX=W-nodeW-maxLabelW-addrLabelPad-6;
+  if(rightX<W*0.45)rightX=W*0.45;
+  flowRight=rightX;
+
+  // Left node: full height block spanning all flows (need room for label above)
+  var topPad=(H-totalH)/2;
+  if(topPad<28)topPad=28;
+
+  // Compute flow positions on left and right
+  var total=0;
+  for(var i=0;i<entries.length;i++)total+=entries[i].amount;
+  if(total===0)return;
+
+  // Left node positions (stacked proportionally)
+  var leftFlows=[];
+  var ly=topPad;
+  for(var i=0;i<entries.length;i++){
+    var fh=(entries[i].amount/total)*totalH;
+    if(fh<2)fh=2;
+    leftFlows.push({y:ly,h:fh});
+    ly+=fh;
+  }
+
+  // Right node positions (equal row height, centered)
+  var rightFlows=[];
+  var ry=topPad;
+  for(var i=0;i<entries.length;i++){
+    rightFlows.push({y:ry,h:rowH});
+    ry+=rowH+gap;
+  }
+
+  // Color palette
+  var colors=["#33ff33","#20cc20","#55ff55","#1a9a1a","#ffaa00","#0f7f0f","#44dd44","#2eb82e"];
+
+  // Draw flows (bezier curves)
+  for(var i=0;i<entries.length;i++){
+    var lf=leftFlows[i],rf=rightFlows[i];
+    var c=colors[i%colors.length];
+    var alpha=(sankeyHoverIdx===-1||sankeyHoverIdx===i)?0.35:0.1;
+    ctx.fillStyle=c.replace(")",","+alpha+")");
+    // Convert hex to rgba
+    var r=parseInt(c.slice(1,3),16),g=parseInt(c.slice(3,5),16),b=parseInt(c.slice(5,7),16);
+    ctx.fillStyle="rgba("+r+","+g+","+b+","+alpha+")";
+    ctx.beginPath();
+    var cpx=(flowLeft+flowRight)/2;
+    ctx.moveTo(flowLeft,lf.y);
+    ctx.bezierCurveTo(cpx,lf.y,cpx,rf.y,flowRight,rf.y);
+    ctx.lineTo(flowRight,rf.y+rf.h);
+    ctx.bezierCurveTo(cpx,rf.y+rf.h,cpx,lf.y+lf.h,flowLeft,lf.y+lf.h);
+    ctx.closePath();
+    ctx.fill();
+
+    // Stroke on hover
+    if(sankeyHoverIdx===i){
+      ctx.strokeStyle="rgba("+r+","+g+","+b+",0.8)";
+      ctx.lineWidth=1.5;
+      ctx.stroke();
+    }
+  }
+
+  // Draw left node (block reward bar)
+  ctx.fillStyle="#1a9a1a";
+  ctx.fillRect(leftX,topPad,nodeW,totalH);
+
+  // Draw right nodes
+  for(var i=0;i<entries.length;i++){
+    var rf=rightFlows[i];
+    var c=colors[i%colors.length];
+    ctx.fillStyle=c;
+    ctx.fillRect(rightX,rf.y,nodeW,rf.h);
+  }
+
+  // Left label: "Block Reward" rotated or above
+  ctx.fillStyle="#1a9a1a";
+  ctx.font="10px monospace";
+  ctx.textAlign="center";
+  ctx.textBaseline="bottom";
+  ctx.fillText("Block",leftX+nodeW/2,topPad-10);
+  ctx.fillText("Reward",leftX+nodeW/2,topPad-1);
+
+  // Right labels: address + amount
+  ctx.textAlign="left";
+  ctx.textBaseline="middle";
+  for(var i=0;i<entries.length;i++){
+    var rf=rightFlows[i];
+    var c=colors[i%colors.length];
+    var dimmed=(sankeyHoverIdx!==-1&&sankeyHoverIdx!==i);
+    ctx.font="11px monospace";
+    ctx.fillStyle=dimmed?"#0a3a0a":c;
+    ctx.fillText(entries[i]._label,rightX+nodeW+addrLabelPad,rf.y+rf.h/2-7);
+    ctx.font="10px monospace";
+    ctx.fillStyle=dimmed?"#0a3a0a":"#1a9a1a";
+    ctx.fillText(entries[i]._amtStr,rightX+nodeW+addrLabelPad,rf.y+rf.h/2+7);
+  }
+
+  // Store layout for hit testing
+  drawSankey._rightFlows=rightFlows;
+  drawSankey._leftFlows=leftFlows;
+  drawSankey._topPad=topPad;
+  drawSankey._totalH=totalH;
+  drawSankey._leftX=leftX;
+  drawSankey._nodeW=nodeW;
+  drawSankey._total=total;
+}
+
+(function(){
+  var wrap=document.getElementById("sankey-wrap");
+  if(!wrap)return;
+  wrap.style.cursor="default";
+  wrap.addEventListener("mousemove",function(e){
+    if(!sankeyPayouts||sankeyPayouts.length===0)return;
+    var rect=wrap.getBoundingClientRect();
+    var mx=e.clientX-rect.left;
+    var my=e.clientY-rect.top;
+    var rf=drawSankey._rightFlows;
+    var lf=drawSankey._leftFlows;
+    if(!rf)return;
+    // Check if hovering over the left "Block Reward" node
+    var onLeftNode=false;
+    var lnX=drawSankey._leftX,lnW=drawSankey._nodeW,tp=drawSankey._topPad,tH=drawSankey._totalH;
+    if(lnX!=null&&mx>=lnX&&mx<=lnX+lnW&&my>=tp&&my<=tp+tH){onLeftNode=true;}
+    var idx=-1;
+    if(!onLeftNode){
+      // Hit test right-side rows (generous hit area)
+      for(var i=0;i<rf.length;i++){
+        if(my>=rf[i].y&&my<=rf[i].y+rf[i].h){idx=i;break;}
+      }
+      // Also hit test left-side flows
+      if(idx===-1&&lf){
+        for(var i=0;i<lf.length;i++){
+          if(my>=lf[i].y&&my<=lf[i].y+lf[i].h){idx=i;break;}
+        }
+      }
+    }
+    if(idx!==sankeyHoverIdx){
+      sankeyHoverIdx=idx;
+      drawSankey();
+    }
+    var tooltip=document.getElementById("sankey-tooltip");
+    if(onLeftNode){
+      var totalAmt=drawSankey._total||0;
+      tooltip.innerHTML='<span class="st-addr">Block Reward</span><br><span class="st-amt">'+esc(fmtBtc(totalAmt))+'</span> <span class="st-pct">('+sankeyPayouts.length+' outputs)</span>';
+      tooltip.style.display="block";
+      var tx=e.clientX+14,ty=e.clientY-40;
+      if(tx+200>window.innerWidth)tx=e.clientX-214;
+      if(ty<0)ty=e.clientY+14;
+      tooltip.style.left=tx+"px";
+      tooltip.style.top=ty+"px";
+      wrap.style.cursor="pointer";
+    }else if(idx>=0){
+      var p=sankeyPayouts[idx];
+      tooltip.innerHTML='<span class="st-addr">'+esc(p.address)+'</span><br><span class="st-amt">'+esc(fmtBtc(p.amount))+'</span> <span class="st-pct">('+p.pct.toFixed(1)+'%)</span>';
+      tooltip.style.display="block";
+      var tx=e.clientX+14,ty=e.clientY-40;
+      if(tx+200>window.innerWidth)tx=e.clientX-214;
+      if(ty<0)ty=e.clientY+14;
+      tooltip.style.left=tx+"px";
+      tooltip.style.top=ty+"px";
+      wrap.style.cursor="pointer";
+    }else{
+      tooltip.style.display="none";
+      wrap.style.cursor="default";
+    }
+  });
+  wrap.addEventListener("mouseleave",function(){
+    if(sankeyHoverIdx!==-1){
+      sankeyHoverIdx=-1;
+      drawSankey();
+    }
+    document.getElementById("sankey-tooltip").style.display="none";
+    wrap.style.cursor="default";
+  });
+})();
 
 /* ---- Share detail modal ---- */
 function openShareDetail(hash){
@@ -422,18 +674,23 @@ function update(data){
     tb.innerHTML=h;
   }
 
-  // PPLNS chart
-  var chart=document.getElementById("pplns-chart");
-  if(!data.miner_weights||Object.keys(data.miner_weights).length===0){
-    chart.innerHTML='<div class="no-data">No data yet</div>';
-  }else{
-    var entries=Object.entries(data.miner_weights).sort(function(a,b){return b[1]-a[1]});
-    var h="";
-    for(var i=0;i<entries.length;i++){
-      var addr=entries[i][0],pct=entries[i][1];
-      h+='<div class="bar-row"><div class="bar-label">'+addrLink(addr)+'</div><div class="bar-track"><div class="bar-fill" style="width:'+pct.toFixed(1)+'%"></div></div><div class="bar-pct">'+pct.toFixed(1)+'%</div></div>';
+  // Payout Sankey diagram + table
+  sankeyPayouts=(data.payout_entries||[]).map(function(e){return{address:e.address,amount:e.amount,pct:e.pct};});
+  sankeyHoverIdx=-1;
+  drawSankey();
+  var ptbl=document.getElementById("payout-table");
+  var ptbody=document.getElementById("payout-tbody");
+  if(sankeyPayouts.length>0){
+    ptbl.style.display="";
+    var ph="";
+    for(var i=0;i<sankeyPayouts.length;i++){
+      var p=sankeyPayouts[i];
+      var addrCls=(_ourAddr&&p.address!==_ourAddr)?"miner other":"miner";
+      ph+='<tr><td class="'+addrCls+'">'+addrLink(p.address)+'</td><td>'+esc(fmtBtc(p.amount))+'</td><td>'+p.pct.toFixed(1)+'%</td></tr>';
     }
-    chart.innerHTML=h;
+    ptbody.innerHTML=ph;
+  }else{
+    ptbl.style.display="none";
   }
 
   // Seed graph history from server on first load, then append
@@ -460,13 +717,14 @@ poll();
 setInterval(poll,5000);
 
 // Initialize graph hover handlers
-initGraph("graph-hashrate","rgba(88,166,255,1)",fmtHash);
-initGraph("graph-shares","rgba(63,185,80,1)",function(v){return Math.round(v).toString();});
+initGraph("graph-hashrate","rgba(51,255,51,1)",fmtHash);
+initGraph("graph-shares","rgba(32,204,32,1)",function(v){return Math.round(v).toString();});
 
 // Redraw graphs on resize
 window.addEventListener("resize",function(){
   drawGraph("graph-hashrate");
   drawGraph("graph-shares");
+  drawSankey();
 });
 </script>
 </body>

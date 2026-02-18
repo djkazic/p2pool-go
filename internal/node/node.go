@@ -483,29 +483,26 @@ func (n *Node) handleLocatorRequest(req *p2p.ShareLocatorReq) *p2p.ShareLocatorR
 
 	// ancestors is tip→genesis (index 0=tip, len-1=genesis).
 	// We want shares AFTER the fork point, in oldest-first order.
-	var startIdx int // index in ancestors[] to start collecting (inclusive)
+	//
+	// forkIdx == -1 → no locator matched → send all shares from genesis
+	// forkIdx == 0  → locator matched the tip → peer is in sync
+	// forkIdx == N  → N shares exist between fork point and tip
+	var afterFork int
 	if forkIdx < 0 {
-		// No locator matched — send from genesis
-		startIdx = 0
+		// No locator matched — peer has nothing, send everything
+		afterFork = len(ancestors)
 	} else {
-		// Fork point is at forkIdx; we want shares newer than it
-		startIdx = forkIdx
+		afterFork = forkIdx
 	}
 
-	// Collect shares from fork point toward tip (walk ancestors backward)
-	// ancestors[startIdx-1] is one step newer than ancestors[startIdx]
-	// We want oldest-first, so collect from startIdx-1 down to 0, then reverse.
-	maxCount := req.MaxCount
-	if maxCount <= 0 {
-		maxCount = syncBatchSize
-	}
-
-	// Shares after fork point: indices [0, forkIdx) in ancestors (tip→genesis).
-	// That's forkIdx shares (forkIdx-1 down to 0). Reverse to oldest-first.
-	afterFork := startIdx // number of shares after fork point
 	if afterFork == 0 {
 		// Fork point is the tip — peer is already in sync
 		return &p2p.ShareLocatorResp{Type: p2p.MsgTypeLocatorResp}
+	}
+
+	maxCount := req.MaxCount
+	if maxCount <= 0 {
+		maxCount = syncBatchSize
 	}
 
 	// Build oldest-first slice from ancestors

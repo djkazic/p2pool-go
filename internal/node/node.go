@@ -798,12 +798,12 @@ func (n *Node) logStatus() {
 	metrics.UptimeSeconds.Set(time.Since(n.startTime).Seconds())
 
 	// Record graph history point
-	n.recordGraphPoint(poolHR, shareCount)
+	n.recordGraphPoint(poolHR, n.localHashrate())
 }
 
 const minGraphInterval = 20 * time.Second
 
-func (n *Node) recordGraphPoint(poolHashrate float64, shareCount int) {
+func (n *Node) recordGraphPoint(poolHashrate float64, localHashrate float64) {
 	now := time.Now()
 	n.graphHistoryMu.Lock()
 	defer n.graphHistoryMu.Unlock()
@@ -814,9 +814,9 @@ func (n *Node) recordGraphPoint(poolHashrate float64, shareCount int) {
 		}
 	}
 	n.graphHistory = append(n.graphHistory, web.HistoryPoint{
-		Timestamp:    now.Unix(),
-		PoolHashrate: poolHashrate,
-		ShareCount:   shareCount,
+		Timestamp:     now.Unix(),
+		PoolHashrate:  poolHashrate,
+		LocalHashrate: localHashrate,
 	})
 	if len(n.graphHistory) > maxGraphHistory {
 		n.graphHistory = n.graphHistory[len(n.graphHistory)-maxGraphHistory:]
@@ -906,6 +906,90 @@ func (n *Node) recordBlockFound(hashHex string) {
 	n.lastBlockHash = hashHex
 }
 
+// buildTreeData builds the sharechain tree visualization data.
+// It collects the last 20 main-chain ancestors plus any orphan forks branching
+// off them, so the dashboard can render a git-graph-style tree.
+func (n *Node) buildTreeData() []web.TreeShare {
+	tip, ok := n.chain.Tip()
+	if !ok {
+		return nil
+	}
+
+	// Get last 20 main chain ancestors
+	mainAncestors := n.chain.GetAncestors(tip.Hash(), 10)
+	if len(mainAncestors) == 0 {
+		return nil
+	}
+
+	// Build set of main chain hashes
+	mainSet := make(map[[32]byte]bool, len(mainAncestors))
+	for _, s := range mainAncestors {
+		mainSet[s.Hash()] = true
+	}
+
+	// Build forward children map from all shares in the store
+	allHashes := n.chain.AllHashes()
+	children := make(map[[32]byte][][32]byte)
+	shareByHash := make(map[[32]byte]*types.Share, len(allHashes))
+	for _, h := range allHashes {
+		s, ok := n.chain.GetShare(h)
+		if !ok {
+			continue
+		}
+		shareByHash[h] = s
+		children[s.PrevShareHash] = append(children[s.PrevShareHash], h)
+	}
+
+	// Collect orphan forks: walk children of main-chain shares that are NOT in mainSet
+	var collectOrphans func(hash [32]byte)
+	orphanSet := make(map[[32]byte]bool)
+	collectOrphans = func(hash [32]byte) {
+		for _, childHash := range children[hash] {
+			if !mainSet[childHash] && !orphanSet[childHash] {
+				orphanSet[childHash] = true
+				collectOrphans(childHash) // recurse for multi-depth forks
+			}
+		}
+	}
+	for _, s := range mainAncestors {
+		collectOrphans(s.Hash())
+	}
+
+	// Build result: main chain shares (oldest first) + orphans
+	result := make([]web.TreeShare, 0, len(mainAncestors)+len(orphanSet))
+
+	// Main chain in oldest-first order (reverse mainAncestors which is newest-first)
+	for i := len(mainAncestors) - 1; i >= 0; i-- {
+		s := mainAncestors[i]
+		result = append(result, web.TreeShare{
+			Hash:          s.HashHex(),
+			PrevShareHash: s.PrevShareHashHex(),
+			Miner:         s.MinerAddress,
+			Timestamp:     int64(s.Header.Timestamp),
+			IsBlock:       s.IsBlock(),
+			MainChain:     true,
+		})
+	}
+
+	// Orphan shares
+	for h := range orphanSet {
+		s, ok := shareByHash[h]
+		if !ok {
+			continue
+		}
+		result = append(result, web.TreeShare{
+			Hash:          s.HashHex(),
+			PrevShareHash: s.PrevShareHashHex(),
+			Miner:         s.MinerAddress,
+			Timestamp:     int64(s.Header.Timestamp),
+			IsBlock:       s.IsBlock(),
+			MainChain:     false,
+		})
+	}
+
+	return result
+}
+
 // dashboardData collects all metrics for the web dashboard.
 func (n *Node) dashboardData() *web.StatusData {
 	target := n.chain.GetExpectedTarget()
@@ -921,7 +1005,7 @@ func (n *Node) dashboardData() *web.StatusData {
 		tipTime = int64(tip.Header.Timestamp)
 		// Single walk for both recent shares and PPLNS window
 		pplnsAncestors = n.chain.GetAncestors(tip.Hash(), n.config.PPLNSWindowSize)
-		recentCount := 20
+		recentCount := 10
 		if recentCount > len(pplnsAncestors) {
 			recentCount = len(pplnsAncestors)
 		}
@@ -973,7 +1057,8 @@ func (n *Node) dashboardData() *web.StatusData {
 	shareCount := n.chain.Count()
 
 	// Record a graph history point on each dashboard poll
-	n.recordGraphPoint(poolHashrate, shareCount)
+	localHR := n.localHashrate()
+	n.recordGraphPoint(poolHashrate, localHR)
 
 	// Estimated time to find a Bitcoin block
 	var estTimeToBlock int64
@@ -1001,6 +1086,17 @@ func (n *Node) dashboardData() *web.StatusData {
 	}
 	n.lastBlockMu.RUnlock()
 
+	// Peer details for network graph
+	peerDetails := n.p2pNode.PeerDetails()
+	peers := make([]web.PeerInfo, len(peerDetails))
+	for i, pd := range peerDetails {
+		peers[i] = web.PeerInfo{
+			ID:      pd.ShortID,
+			Latency: pd.LatencyMs,
+			Address: pd.Address,
+		}
+	}
+
 	return &web.StatusData{
 		ShareCount:         shareCount,
 		MinerCount:         n.stratumSrv.SessionCount(),
@@ -1019,7 +1115,7 @@ func (n *Node) dashboardData() *web.StatusData {
 		PPLNSWindowSize:    n.config.PPLNSWindowSize,
 		Uptime:             int64(time.Since(n.startTime).Seconds()),
 		PoolHashrate:       poolHashrate,
-		LocalHashrate:      n.localHashrate(),
+		LocalHashrate:      localHR,
 		LastBlockFoundTime: lastBlockTime,
 		LastBlockFoundHash: lastBlockHash,
 		EstTimeToBlock:     estTimeToBlock,
@@ -1027,6 +1123,9 @@ func (n *Node) dashboardData() *web.StatusData {
 		OurAddress:         n.minerAddress,
 		PayoutEntries:      payoutEntries,
 		CoinbaseValue:      coinbaseValue,
+		TreeShares:         n.buildTreeData(),
+		OurPeerID:          n.p2pNode.ShortID(),
+		Peers:              peers,
 	}
 }
 

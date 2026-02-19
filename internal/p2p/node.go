@@ -123,6 +123,37 @@ func (n *Node) BroadcastShare(share *ShareMsg) error {
 	return n.pubsub.PublishShare(share)
 }
 
+// PeerDetail holds information about a connected peer for the dashboard.
+type PeerDetail struct {
+	ShortID   string
+	LatencyMs int64
+	Address   string
+}
+
+// ShortID returns the short form of our own peer ID.
+func (n *Node) ShortID() string {
+	return n.Host.ID().ShortString()
+}
+
+// PeerDetails returns details about all connected peers.
+func (n *Node) PeerDetails() []PeerDetail {
+	peers := n.Host.Network().Peers()
+	details := make([]PeerDetail, 0, len(peers))
+	for _, pid := range peers {
+		latency := n.Host.Peerstore().LatencyEWMA(pid)
+		addr := ""
+		if addrs := n.Host.Peerstore().Addrs(pid); len(addrs) > 0 {
+			addr = addrs[0].String()
+		}
+		details = append(details, PeerDetail{
+			ShortID:   pid.ShortString(),
+			LatencyMs: latency.Milliseconds(),
+			Address:   addr,
+		})
+	}
+	return details
+}
+
 // PeerCount returns the number of connected peers.
 func (n *Node) PeerCount() int {
 	return len(n.Host.Network().Peers())

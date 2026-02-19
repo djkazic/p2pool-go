@@ -44,6 +44,8 @@ tr.golden td.hash:hover{color:#ffcc33}
 .sankey-tooltip .st-amt{color:#33ff33;font-weight:600}
 .sankey-tooltip .st-pct{color:#1a9a1a}
 .payout-table{margin-top:16px;border-top:1px solid #0a1f0a}
+.payout-table tbody{max-height:140px;overflow-y:auto;display:block}
+.payout-table thead,.payout-table tbody tr{display:table;width:100%;table-layout:fixed}
 .payout-table th{text-align:left;color:#1a9a1a;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.5px;padding:8px 8px 4px}
 .payout-table td{padding:4px 8px;font-size:0.75rem;border:none;font-family:"SF Mono",SFMono-Regular,Consolas,"Liberation Mono",Menlo,monospace}
 .payout-table th:last-child,.payout-table td:last-child{text-align:right}
@@ -65,6 +67,8 @@ canvas{width:100%;height:100%}
 .graph-tooltip{position:fixed;background:#0d160d;border:1px solid #0f2a0f;border-radius:6px;padding:8px 10px;font-size:0.75rem;font-family:"SF Mono",SFMono-Regular,Consolas,"Liberation Mono",Menlo,monospace;color:#20cc20;pointer-events:none;z-index:50;white-space:nowrap;display:none;box-shadow:0 4px 12px rgba(0,10,0,0.5)}
 .graph-tooltip .tt-val{color:#33ff33;font-weight:600}
 .graph-tooltip .tt-time{color:#1a9a1a;font-size:0.65rem}
+.tree-wrap{position:relative;width:100%;height:160px;cursor:crosshair}
+.peer-wrap{position:relative;width:100%;height:200px;cursor:crosshair}
 
 /* Share detail modal */
 .modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:100;justify-content:center;align-items:center}
@@ -107,8 +111,8 @@ body::after{content:"";position:fixed;top:0;left:0;width:100%;height:100%;backgr
     <div class="graph-wrap"><canvas id="graph-hashrate"></canvas></div>
   </div>
   <div class="graph-card">
-    <h2>Share Count</h2>
-    <div class="graph-wrap"><canvas id="graph-shares"></canvas></div>
+    <h2>Local Hashrate</h2>
+    <div class="graph-wrap"><canvas id="graph-local"></canvas></div>
   </div>
 </div>
 
@@ -129,6 +133,16 @@ body::after{content:"";position:fixed;top:0;left:0;width:100%;height:100%;backgr
       <tbody id="payout-tbody"></tbody>
     </table>
   </div>
+</div>
+
+<div class="graph-card" style="margin-bottom:24px">
+  <h2>Peer Network</h2>
+  <div class="peer-wrap"><canvas id="peer-canvas"></canvas></div>
+</div>
+
+<div class="graph-card" style="margin-bottom:24px">
+  <h2>Sharechain</h2>
+  <div class="tree-wrap"><canvas id="tree-canvas"></canvas></div>
 </div>
 
 <div class="card">
@@ -228,7 +242,7 @@ function fmtBtc(sats){
 /* ---- Graph history (ring buffers, stores {t:timestamp, v:value}) ---- */
 var MAX_POINTS=60;
 var histHashrate=[];
-var histShares=[];
+var histLocal=[];
 var histSeeded=false;
 function pushHistory(arr,t,v){arr.push({t:t,v:v});if(arr.length>MAX_POINTS)arr.shift();}
 
@@ -243,7 +257,7 @@ function initGraph(canvasId,color,formatter){
 
   wrap.addEventListener("mousemove",function(e){
     var st=graphState[canvasId];
-    var data=canvasId==="graph-hashrate"?histHashrate:histShares;
+    var data=canvasId==="graph-hashrate"?histHashrate:histLocal;
     if(data.length<2)return;
     var rect=wrap.getBoundingClientRect();
     var mx=e.clientX-rect.left;
@@ -284,7 +298,7 @@ function initGraph(canvasId,color,formatter){
 function drawGraph(canvasId){
   var st=graphState[canvasId];
   if(!st)return;
-  var data=canvasId==="graph-hashrate"?histHashrate:histShares;
+  var data=canvasId==="graph-hashrate"?histHashrate:histLocal;
   var color=st.color,formatter=st.formatter,hoverIdx=st.hoverIdx;
   var canvas=document.getElementById(canvasId);
   if(!canvas)return;
@@ -636,6 +650,358 @@ document.getElementById("share-modal").addEventListener("click",function(e){
   if(e.target===this)closeModal();
 });
 
+/* ---- Sharechain tree visualization ---- */
+var treeShares=[];
+var treeHoverIdx=-1;
+var treeNodes=[]; // laid out nodes with x,y for hit testing
+
+function layoutTree(shares){
+  if(!shares||shares.length===0)return[];
+  // Separate main chain (already oldest-first from backend) and forks
+  var main=[],forks=[];
+  for(var i=0;i<shares.length;i++){
+    if(shares[i].main_chain)main.push(shares[i]);
+    else forks.push(shares[i]);
+  }
+  // Assign columns to main chain nodes
+  var nodes=[];
+  var hashToNode={};
+  for(var i=0;i<main.length;i++){
+    var n={share:main[i],col:i,lane:0,main:true};
+    nodes.push(n);
+    hashToNode[main[i].hash]=n;
+  }
+  // Group fork nodes into branches by walking prev_share_hash links
+  // Find fork point (the main-chain parent) for each fork node
+  var forkByHash={};
+  for(var i=0;i<forks.length;i++)forkByHash[forks[i].hash]=forks[i];
+
+  // Build branches: connected components off main chain
+  var branches=[];
+  var assigned={};
+  for(var i=0;i<forks.length;i++){
+    if(assigned[forks[i].hash])continue;
+    // Walk back to find fork point on main chain
+    var chain=[forks[i]];
+    assigned[forks[i].hash]=true;
+    var cur=forks[i];
+    while(cur.prev_share_hash&&forkByHash[cur.prev_share_hash]&&!assigned[cur.prev_share_hash]){
+      cur=forkByHash[cur.prev_share_hash];
+      chain.unshift(cur);
+      assigned[cur.hash]=true;
+    }
+    // cur.prev_share_hash should be on main chain (or unknown)
+    var forkPoint=hashToNode[cur.prev_share_hash]||null;
+    // Also collect children extending forward from this branch
+    var extended=true;
+    while(extended){
+      extended=false;
+      for(var j=0;j<forks.length;j++){
+        if(!assigned[forks[j].hash]&&forkByHash[chain[chain.length-1]]){
+          // Check if this fork's parent is the last in our chain
+          if(forks[j].prev_share_hash===chain[chain.length-1].hash){
+            chain.push(forks[j]);
+            assigned[forks[j].hash]=true;
+            extended=true;
+          }
+        }
+      }
+    }
+    branches.push({shares:chain,forkPoint:forkPoint});
+  }
+  // Assign lanes: alternating above/below (+1, -1, +2, -2, ...)
+  var laneIdx=0;
+  var laneSeq=[1,-1,2,-2,3,-3,4,-4];
+  for(var b=0;b<branches.length;b++){
+    var lane=laneSeq[laneIdx%laneSeq.length];
+    laneIdx++;
+    var br=branches[b];
+    var startCol=br.forkPoint?br.forkPoint.col+1:0;
+    for(var j=0;j<br.shares.length;j++){
+      var n={share:br.shares[j],col:startCol+j,lane:lane,main:false,forkPoint:br.forkPoint};
+      nodes.push(n);
+      hashToNode[br.shares[j].hash]=n;
+    }
+  }
+  // Store hashToNode on each node for line drawing
+  for(var i=0;i<nodes.length;i++)nodes[i]._hashToNode=hashToNode;
+  return nodes;
+}
+
+function drawTree(){
+  var canvas=document.getElementById("tree-canvas");
+  if(!canvas)return;
+  var wrap=canvas.parentElement;
+  var ctx=canvas.getContext("2d");
+  var dpr=window.devicePixelRatio||1;
+  var rect=wrap.getBoundingClientRect();
+  canvas.width=rect.width*dpr;
+  canvas.height=rect.height*dpr;
+  ctx.scale(dpr,dpr);
+  var W=rect.width,H=rect.height;
+  ctx.clearRect(0,0,W,H);
+
+  treeNodes=layoutTree(treeShares);
+  if(treeNodes.length===0)return;
+
+  // Find max column for scaling
+  var maxCol=0,minLane=0,maxLane=0;
+  for(var i=0;i<treeNodes.length;i++){
+    if(treeNodes[i].col>maxCol)maxCol=treeNodes[i].col;
+    if(treeNodes[i].lane<minLane)minLane=treeNodes[i].lane;
+    if(treeNodes[i].lane>maxLane)maxLane=treeNodes[i].lane;
+  }
+  var padX=30,padY=30;
+  var gW=W-2*padX,gH=H-2*padY;
+  var laneRange=Math.max(maxLane-minLane,1);
+  var centerY=H/2;
+  var laneSpacing=Math.min(gH/laneRange,30);
+
+  function getX(col){return maxCol>0?padX+col/maxCol*gW:W/2;}
+  function getY(lane){return centerY+lane*laneSpacing;}
+
+  var colors=["#33ff33","#20cc20","#55ff55","#1a9a1a","#ffaa00","#0f7f0f","#44dd44","#2eb82e"];
+  function minerColor(miner){
+    if(!miner)return colors[0];
+    var h=0;
+    for(var i=0;i<miner.length;i++)h=((h<<5)-h+miner.charCodeAt(i))|0;
+    return colors[((h%colors.length)+colors.length)%colors.length];
+  }
+
+  // Build hashToNode map for this draw
+  var hashToNode={};
+  for(var i=0;i<treeNodes.length;i++)hashToNode[treeNodes[i].share.hash]=treeNodes[i];
+
+  // Draw lines first (parent -> child)
+  for(var i=0;i<treeNodes.length;i++){
+    var n=treeNodes[i];
+    var nx=getX(n.col),ny=getY(n.lane);
+    // Find parent node
+    var parent=hashToNode[n.share.prev_share_hash];
+    if(!parent)continue;
+    var px=getX(parent.col),py=getY(parent.lane);
+    ctx.beginPath();
+    if(n.main){
+      ctx.strokeStyle="#33ff33";
+      ctx.lineWidth=2;
+      ctx.setLineDash([]);
+    }else{
+      ctx.strokeStyle="#1a6a1a";
+      ctx.lineWidth=1;
+      ctx.setLineDash([4,3]);
+    }
+    ctx.moveTo(px,py);
+    ctx.lineTo(nx,ny);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Draw nodes
+  // Find tip (last main chain node)
+  var tipHash="";
+  for(var i=treeNodes.length-1;i>=0;i--){
+    if(treeNodes[i].main){tipHash=treeNodes[i].share.hash;break;}
+  }
+  for(var i=0;i<treeNodes.length;i++){
+    var n=treeNodes[i];
+    var nx=getX(n.col),ny=getY(n.lane);
+    var r=6;
+    var isOurs=_ourAddr&&n.share.miner===_ourAddr;
+    var fillColor=isOurs?minerColor(n.share.miner):"#0f3f0f";
+    if(n.share.is_block){fillColor=isOurs?"#ffaa00":"#6b4800";r=8;}
+    // Hover highlight
+    if(treeHoverIdx===i){r+=2;}
+    ctx.beginPath();
+    ctx.arc(nx,ny,r,0,Math.PI*2);
+    ctx.fillStyle=fillColor;
+    ctx.fill();
+    // Tip glow ring
+    if(n.share.hash===tipHash){
+      ctx.strokeStyle="#33ff33";
+      ctx.lineWidth=2;
+      ctx.stroke();
+    }else if(!n.main){
+      ctx.strokeStyle="#0a120a";
+      ctx.lineWidth=1;
+      ctx.stroke();
+    }
+    // Store pixel position for hit testing
+    treeNodes[i]._x=nx;
+    treeNodes[i]._y=ny;
+    treeNodes[i]._r=r;
+  }
+}
+
+(function(){
+  var wrap=document.querySelector(".tree-wrap");
+  if(!wrap)return;
+  wrap.addEventListener("mousemove",function(e){
+    if(treeNodes.length===0)return;
+    var rect=wrap.getBoundingClientRect();
+    var mx=e.clientX-rect.left,my=e.clientY-rect.top;
+    var hitIdx=-1;
+    for(var i=0;i<treeNodes.length;i++){
+      var dx=mx-treeNodes[i]._x,dy=my-treeNodes[i]._y;
+      if(dx*dx+dy*dy<=(treeNodes[i]._r+4)*(treeNodes[i]._r+4)){hitIdx=i;break;}
+    }
+    if(hitIdx!==treeHoverIdx){
+      treeHoverIdx=hitIdx;
+      drawTree();
+    }
+    var tooltip=document.getElementById("graph-tooltip");
+    if(hitIdx>=0){
+      var n=treeNodes[hitIdx];
+      var hashShort=n.share.hash.substring(0,12)+"...";
+      var minerShort=n.share.miner.length>20?n.share.miner.substring(0,10)+"..."+n.share.miner.slice(-6):n.share.miner;
+      var label=n.main?"main":"fork";
+      if(n.share.is_block)label="BLOCK";
+      tooltip.innerHTML='<span class="tt-val">'+esc(hashShort)+'</span><br><span class="tt-time">'+esc(minerShort)+' &middot; '+label+' &middot; '+timeAgo(n.share.timestamp)+'</span>';
+      tooltip.style.display="block";
+      var tx=e.clientX+14,ty=e.clientY-40;
+      if(tx+200>window.innerWidth)tx=e.clientX-214;
+      if(ty<0)ty=e.clientY+14;
+      tooltip.style.left=tx+"px";
+      tooltip.style.top=ty+"px";
+      wrap.style.cursor="pointer";
+    }else{
+      tooltip.style.display="none";
+      wrap.style.cursor="crosshair";
+    }
+  });
+  wrap.addEventListener("mouseleave",function(){
+    if(treeHoverIdx!==-1){
+      treeHoverIdx=-1;
+      drawTree();
+    }
+    document.getElementById("graph-tooltip").style.display="none";
+    wrap.style.cursor="crosshair";
+  });
+  wrap.addEventListener("click",function(e){
+    if(treeHoverIdx>=0&&treeHoverIdx<treeNodes.length){
+      openShareDetail(treeNodes[treeHoverIdx].share.hash);
+    }
+  });
+})();
+
+/* ---- Peer network radial graph ---- */
+var peerData=[];
+var ourPeerID="";
+var peerHoverIdx=-1;
+var peerNodes=[]; // laid out {x,y,r,peer} for hit testing
+
+function drawPeers(){
+  var canvas=document.getElementById("peer-canvas");
+  if(!canvas)return;
+  var wrap=canvas.parentElement;
+  var ctx=canvas.getContext("2d");
+  var dpr=window.devicePixelRatio||1;
+  var rect=wrap.getBoundingClientRect();
+  canvas.width=rect.width*dpr;
+  canvas.height=rect.height*dpr;
+  ctx.scale(dpr,dpr);
+  var W=rect.width,H=rect.height;
+  ctx.clearRect(0,0,W,H);
+
+  var cx=W/2,cy=H/2;
+  peerNodes=[];
+
+  // Draw "You" node at center
+  var ourR=10;
+  ctx.beginPath();
+  ctx.arc(cx,cy,ourR,0,Math.PI*2);
+  ctx.fillStyle="#33ff33";
+  ctx.fill();
+  ctx.font="bold 10px monospace";
+  ctx.fillStyle="#33ff33";
+  ctx.textAlign="center";
+  ctx.textBaseline="top";
+  ctx.fillText("You",cx,cy+ourR+4);
+
+  if(!peerData||peerData.length===0)return;
+
+  var n=peerData.length;
+  var radius=Math.min(W,H)*0.38;
+  var peerR=6;
+
+  for(var i=0;i<n;i++){
+    var angle=(2*Math.PI*i/n)-Math.PI/2;
+    var px=cx+radius*Math.cos(angle);
+    var py=cy+radius*Math.sin(angle);
+    var p=peerData[i];
+    var lat=p.latency_ms||0;
+
+    // Color by latency
+    var color;
+    if(lat<=0){color="#555555";}
+    else if(lat<100){color="#33ff33";}
+    else if(lat<=500){color="#ffaa00";}
+    else{color="#cc3333";}
+
+    // Draw line from center to peer
+    ctx.beginPath();
+    ctx.moveTo(cx,cy);
+    ctx.lineTo(px,py);
+    ctx.strokeStyle=color;
+    ctx.lineWidth=(peerHoverIdx===i)?2:1;
+    ctx.globalAlpha=(peerHoverIdx===-1||peerHoverIdx===i)?0.7:0.25;
+    ctx.stroke();
+    ctx.globalAlpha=1;
+
+    // Draw peer node
+    var r=(peerHoverIdx===i)?peerR+2:peerR;
+    ctx.beginPath();
+    ctx.arc(px,py,r,0,Math.PI*2);
+    ctx.fillStyle=color;
+    ctx.globalAlpha=(peerHoverIdx===-1||peerHoverIdx===i)?1:0.4;
+    ctx.fill();
+    ctx.globalAlpha=1;
+
+    peerNodes.push({x:px,y:py,r:r,peer:p});
+  }
+}
+
+(function(){
+  var wrap=document.querySelector(".peer-wrap");
+  if(!wrap)return;
+  wrap.addEventListener("mousemove",function(e){
+    if(peerNodes.length===0)return;
+    var rect=wrap.getBoundingClientRect();
+    var mx=e.clientX-rect.left,my=e.clientY-rect.top;
+    var hitIdx=-1;
+    for(var i=0;i<peerNodes.length;i++){
+      var dx=mx-peerNodes[i].x,dy=my-peerNodes[i].y;
+      if(dx*dx+dy*dy<=(peerNodes[i].r+4)*(peerNodes[i].r+4)){hitIdx=i;break;}
+    }
+    if(hitIdx!==peerHoverIdx){
+      peerHoverIdx=hitIdx;
+      drawPeers();
+    }
+    var tooltip=document.getElementById("graph-tooltip");
+    if(hitIdx>=0){
+      var p=peerNodes[hitIdx].peer;
+      tooltip.innerHTML='<span class="tt-val">'+esc(p.id)+'</span>';
+      tooltip.style.display="block";
+      var tx=e.clientX+14,ty=e.clientY-40;
+      if(tx+200>window.innerWidth)tx=e.clientX-214;
+      if(ty<0)ty=e.clientY+14;
+      tooltip.style.left=tx+"px";
+      tooltip.style.top=ty+"px";
+      wrap.style.cursor="pointer";
+    }else{
+      tooltip.style.display="none";
+      wrap.style.cursor="crosshair";
+    }
+  });
+  wrap.addEventListener("mouseleave",function(){
+    if(peerHoverIdx!==-1){
+      peerHoverIdx=-1;
+      drawPeers();
+    }
+    document.getElementById("graph-tooltip").style.display="none";
+    wrap.style.cursor="crosshair";
+  });
+})();
+
 /* ---- Main update ---- */
 function update(data){
   _net=data.network||"";
@@ -695,19 +1061,30 @@ function update(data){
 
   // Seed graph history from server on first load, then append
   if(!histSeeded&&data.history&&data.history.length>0){
-    histHashrate=[];histShares=[];
+    histHashrate=[];histLocal=[];
     for(var i=0;i<data.history.length;i++){
       histHashrate.push({t:data.history[i].t,v:data.history[i].ph});
-      histShares.push({t:data.history[i].t,v:data.history[i].sc});
+      histLocal.push({t:data.history[i].t,v:data.history[i].lh});
     }
     histSeeded=true;
   }else{
     var now=Math.floor(Date.now()/1000);
     pushHistory(histHashrate,now,data.pool_hashrate||0);
-    pushHistory(histShares,now,data.share_count||0);
+    pushHistory(histLocal,now,data.local_hashrate||0);
   }
   drawGraph("graph-hashrate");
-  drawGraph("graph-shares");
+  drawGraph("graph-local");
+
+  // Peer network graph
+  peerData=data.peers||[];
+  ourPeerID=data.our_peer_id||"";
+  peerHoverIdx=-1;
+  drawPeers();
+
+  // Sharechain tree
+  treeShares=data.tree_shares||[];
+  treeHoverIdx=-1;
+  drawTree();
 }
 
 function poll(){
@@ -718,13 +1095,15 @@ setInterval(poll,5000);
 
 // Initialize graph hover handlers
 initGraph("graph-hashrate","rgba(51,255,51,1)",fmtHash);
-initGraph("graph-shares","rgba(32,204,32,1)",function(v){return Math.round(v).toString();});
+initGraph("graph-local","rgba(32,204,32,1)",fmtHash);
 
 // Redraw graphs on resize
 window.addEventListener("resize",function(){
   drawGraph("graph-hashrate");
-  drawGraph("graph-shares");
+  drawGraph("graph-local");
   drawSankey();
+  drawPeers();
+  drawTree();
 });
 </script>
 </body>

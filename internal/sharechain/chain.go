@@ -426,6 +426,13 @@ func (sc *ShareChain) ValidateLoaded() error {
 	return nil
 }
 
+// AllHashes returns the hashes of all shares in the store.
+func (sc *ShareChain) AllHashes() [][32]byte {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	return sc.store.AllHashes()
+}
+
 // Store returns the underlying share store.
 func (sc *ShareChain) Store() ShareStore {
 	return sc.store

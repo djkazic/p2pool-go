@@ -37,6 +37,9 @@ type StatusData struct {
 	OurAddress         string              `json:"our_address"`
 	PayoutEntries      []PayoutInfo        `json:"payout_entries"`
 	CoinbaseValue      int64               `json:"coinbase_value"`
+	TreeShares         []TreeShare         `json:"tree_shares"`
+	OurPeerID          string              `json:"our_peer_id"`
+	Peers              []PeerInfo          `json:"peers"`
 }
 
 // PayoutInfo describes a single payout output for the dashboard.
@@ -54,11 +57,28 @@ type ShareInfo struct {
 	IsBlock   bool   `json:"is_block"`
 }
 
+// TreeShare describes a share for the sharechain tree visualization.
+type TreeShare struct {
+	Hash          string `json:"hash"`
+	PrevShareHash string `json:"prev_share_hash"`
+	Miner         string `json:"miner"`
+	Timestamp     int64  `json:"timestamp"`
+	IsBlock       bool   `json:"is_block"`
+	MainChain     bool   `json:"main_chain"`
+}
+
+// PeerInfo describes a connected peer for the dashboard.
+type PeerInfo struct {
+	ID      string `json:"id"`
+	Latency int64  `json:"latency_ms"`
+	Address string `json:"address"`
+}
+
 // HistoryPoint is a single data point for dashboard graphs.
 type HistoryPoint struct {
-	Timestamp    int64   `json:"t"`
-	PoolHashrate float64 `json:"ph"`
-	ShareCount   int     `json:"sc"`
+	Timestamp      int64   `json:"t"`
+	PoolHashrate   float64 `json:"ph"`
+	LocalHashrate  float64 `json:"lh"`
 }
 
 // ShareDetail holds full details for a single share.

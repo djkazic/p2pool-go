@@ -41,6 +41,22 @@ func NewVardiff(initialDifficulty float64) *Vardiff {
 	}
 }
 
+// SetDifficulty sets the difficulty to the given value, clamped to
+// [VardiffMinDifficulty, VardiffMaxDifficulty]. It resets the retarget
+// timer and share count so vardiff doesn't immediately override.
+func (v *Vardiff) SetDifficulty(diff float64) {
+	if diff < VardiffMinDifficulty {
+		diff = VardiffMinDifficulty
+	}
+	if diff > VardiffMaxDifficulty {
+		diff = VardiffMaxDifficulty
+	}
+	v.prevDifficulty = v.difficulty
+	v.difficulty = diff
+	v.lastRetarget = time.Now()
+	v.shareCount = 0
+}
+
 // Difficulty returns the current difficulty.
 func (v *Vardiff) Difficulty() float64 {
 	return v.difficulty

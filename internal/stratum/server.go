@@ -245,7 +245,11 @@ func (s *Server) handleConnection(ctx context.Context, conn net.Conn) {
 			if job != nil {
 				if err := session.NotifyJob(job); err != nil {
 					s.logger.Warn("failed to send initial job", zap.String("session", sessionID), zap.Error(err))
+				} else {
+					s.logger.Debug("sent initial job to miner", zap.String("session", sessionID), zap.String("job", job.ID))
 				}
+			} else {
+				s.logger.Warn("no job available for newly authorized miner", zap.String("session", sessionID))
 			}
 			initialJobSent = true
 		}

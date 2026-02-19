@@ -197,6 +197,9 @@ func (d *Discovery) discoverLoop(ctx context.Context, rd *drouting.RoutingDiscov
 			if pi.ID == d.host.ID() || pi.ID == "" {
 				continue
 			}
+			if len(pi.Addrs) == 0 {
+				continue
+			}
 			if d.host.Network().Connectedness(pi.ID) == network.Connected {
 				continue
 			}

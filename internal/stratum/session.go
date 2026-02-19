@@ -95,6 +95,8 @@ func (s *Session) HandleRequest(req *Request) error {
 		return s.handleSubscribe(req)
 	case "mining.authorize":
 		return s.handleAuthorize(req)
+	case "mining.suggest_difficulty":
+		return s.handleSuggestDifficulty(req)
 	case "mining.submit":
 		return s.handleSubmit(req)
 	case "mining.extranonce.subscribe":
@@ -170,8 +172,33 @@ func intersectMasks(minerMask, serverMask string) string {
 	return fmt.Sprintf("%08x", miner&server)
 }
 
+func (s *Session) handleSuggestDifficulty(req *Request) error {
+	var params []float64
+	if err := json.Unmarshal(req.Params, &params); err != nil || len(params) < 1 {
+		return s.sendError(req.ID, 20, "Invalid suggest_difficulty params")
+	}
+
+	diff := params[0]
+	s.Vardiff.SetDifficulty(diff)
+	s.Logger.Info("miner suggested difficulty",
+		zap.Float64("suggested", diff),
+		zap.Float64("effective", s.Vardiff.Difficulty()),
+	)
+
+	// If already subscribed, re-send set_difficulty so the miner knows it took effect
+	if s.State >= StateSubscribed {
+		if err := s.sendDifficulty(s.Vardiff.Difficulty()); err != nil {
+			return err
+		}
+	}
+
+	return s.sendResult(req.ID, true)
+}
+
 func (s *Session) handleSubscribe(req *Request) error {
 	s.State = StateSubscribed
+
+	s.Logger.Debug("miner subscribed", zap.String("extranonce1", s.Extranonce1))
 
 	subscriptions := [][]string{
 		{"mining.set_difficulty", s.ID},

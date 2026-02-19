@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"time"
 
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
@@ -38,6 +39,7 @@ type Session struct {
 
 	// Miner info
 	WorkerName      string
+	ConnectedAt     time.Time
 	Extranonce1     string // Hex-encoded unique per-session extranonce
 	Extranonce2Size int
 
@@ -76,6 +78,7 @@ func NewSession(id string, codec *Codec, extranonce1 string, extranonce2Size int
 		State:           StateConnected,
 		Vardiff:         NewVardiff(startDifficulty),
 		Logger:          logger.With(zap.String("session", id)),
+		ConnectedAt:     time.Now(),
 		Extranonce1:     extranonce1,
 		Extranonce2Size: extranonce2Size,
 		submitCh:        submitCh,

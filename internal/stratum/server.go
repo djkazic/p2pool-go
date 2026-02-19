@@ -128,6 +128,30 @@ func (s *Server) SessionCount() int {
 	return len(s.sessions)
 }
 
+// SessionInfo holds a snapshot of per-session info for the dashboard.
+type SessionInfo struct {
+	WorkerName  string
+	Difficulty  float64
+	ConnectedAt time.Time
+}
+
+// MinerStats returns a snapshot of all authorized sessions.
+func (s *Server) MinerStats() []SessionInfo {
+	s.sessionsMu.RLock()
+	defer s.sessionsMu.RUnlock()
+	var out []SessionInfo
+	for _, sess := range s.sessions {
+		if sess.State == StateAuthorized {
+			out = append(out, SessionInfo{
+				WorkerName:  sess.WorkerName,
+				Difficulty:  sess.Vardiff.Difficulty(),
+				ConnectedAt: sess.ConnectedAt,
+			})
+		}
+	}
+	return out
+}
+
 // SetHTTPHandler sets an HTTP handler for non-stratum connections.
 // HTTP requests are detected by peeking the first byte of each connection.
 func (s *Server) SetHTTPHandler(h http.Handler) {

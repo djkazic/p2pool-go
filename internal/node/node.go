@@ -79,6 +79,7 @@ type Node struct {
 type localShareEvent struct {
 	time       time.Time
 	difficulty float64 // stratum difficulty (Bitcoin-standard)
+	worker     string
 }
 
 // NewNode creates a new p2pool node.
@@ -352,7 +353,7 @@ func (n *Node) handleSubmission(sub *stratum.ShareSubmission) {
 	// Record for local hashrate estimation using the difficulty the share
 	// actually met, not the current vardiff (which may have just increased).
 	metrics.SharesAccepted.Inc()
-	n.recordLocalShare(acceptedDifficulty)
+	n.recordLocalShare(acceptedDifficulty, sub.WorkerName)
 
 	// 6. Check against sharechain difficulty.
 	// Use the share's actual parent (from coinbase commitment) rather than the
@@ -840,12 +841,13 @@ func (n *Node) getGraphHistory() []web.HistoryPoint {
 const localHashrateWindow = 10 * time.Minute
 
 // recordLocalShare records a valid stratum share for local hashrate tracking.
-func (n *Node) recordLocalShare(difficulty float64) {
+func (n *Node) recordLocalShare(difficulty float64, worker string) {
 	n.localSharesMu.Lock()
 	defer n.localSharesMu.Unlock()
 	n.localShares = append(n.localShares, localShareEvent{
 		time:       time.Now(),
 		difficulty: difficulty,
+		worker:     worker,
 	})
 	// Prune events older than the window
 	cutoff := time.Now().Add(-localHashrateWindow)
@@ -882,6 +884,75 @@ func (n *Node) localHashrate() float64 {
 		return 0
 	}
 	return totalDiff * math.Pow(2, 32) / elapsed
+}
+
+// minerShareStat holds per-worker share stats from the local hashrate window.
+type minerShareStat struct {
+	shares        int
+	hashrate      float64
+	lastShareTime time.Time
+}
+
+// minerShareStats groups the localShares window by worker and computes
+// per-miner share count, hashrate, and last share time.
+func (n *Node) minerShareStats() map[string]minerShareStat {
+	n.localSharesMu.Lock()
+	defer n.localSharesMu.Unlock()
+
+	if len(n.localShares) < 2 {
+		// Not enough data for hashrate estimation
+		result := make(map[string]minerShareStat)
+		for _, e := range n.localShares {
+			result[e.worker] = minerShareStat{
+				shares:        1,
+				lastShareTime: e.time,
+			}
+		}
+		return result
+	}
+
+	const minElapsed = 30.0 // seconds
+	windowStart := n.localShares[0].time
+	windowEnd := n.localShares[len(n.localShares)-1].time
+	elapsed := windowEnd.Sub(windowStart).Seconds()
+
+	// Group by worker — skip first share per worker for hashrate (same logic as localHashrate)
+	type workerAccum struct {
+		totalDiff     float64
+		count         int
+		lastShareTime time.Time
+		seenFirst     bool
+	}
+	byWorker := make(map[string]*workerAccum)
+	for _, e := range n.localShares {
+		w, ok := byWorker[e.worker]
+		if !ok {
+			w = &workerAccum{}
+			byWorker[e.worker] = w
+		}
+		w.count++
+		if e.time.After(w.lastShareTime) {
+			w.lastShareTime = e.time
+		}
+		if w.seenFirst {
+			w.totalDiff += e.difficulty
+		}
+		w.seenFirst = true
+	}
+
+	result := make(map[string]minerShareStat, len(byWorker))
+	for worker, acc := range byWorker {
+		var hr float64
+		if elapsed >= minElapsed {
+			hr = acc.totalDiff * math.Pow(2, 32) / elapsed
+		}
+		result[worker] = minerShareStat{
+			shares:        acc.count,
+			hashrate:      hr,
+			lastShareTime: acc.lastShareTime,
+		}
+	}
+	return result
 }
 
 // initLastBlock scans the sharechain from tip to find the most recent Bitcoin block.
@@ -1103,6 +1174,49 @@ func (n *Node) dashboardData() *web.StatusData {
 		}
 	}
 
+	// Per-miner stats: merge session info with share stats, dedup by worker name.
+	// Multiple sessions with the same worker name collapse into one row using
+	// the highest difficulty and earliest connection time.
+	sessionInfos := n.stratumSrv.MinerStats()
+	shareStats := n.minerShareStats()
+	now := time.Now()
+	minerMap := make(map[string]*web.MinerStat, len(sessionInfos))
+	minerOrder := make([]string, 0, len(sessionInfos))
+	for _, si := range sessionInfos {
+		connSecs := int64(now.Sub(si.ConnectedAt).Seconds())
+		if existing, ok := minerMap[si.WorkerName]; ok {
+			// Keep highest difficulty and longest connection
+			if si.Difficulty > existing.Difficulty {
+				existing.Difficulty = si.Difficulty
+			}
+			if connSecs > existing.ConnectedSecs {
+				existing.ConnectedSecs = connSecs
+			}
+		} else {
+			ms := &web.MinerStat{
+				Worker:        si.WorkerName,
+				Difficulty:    si.Difficulty,
+				ConnectedSecs: connSecs,
+			}
+			minerMap[si.WorkerName] = ms
+			minerOrder = append(minerOrder, si.WorkerName)
+		}
+	}
+	// Fill in share stats
+	for worker, ms := range minerMap {
+		if ss, ok := shareStats[worker]; ok {
+			ms.Hashrate = ss.hashrate
+			ms.ShareCount = ss.shares
+			if !ss.lastShareTime.IsZero() {
+				ms.LastShareTime = ss.lastShareTime.Unix()
+			}
+		}
+	}
+	miners := make([]web.MinerStat, 0, len(minerOrder))
+	for _, worker := range minerOrder {
+		miners = append(miners, *minerMap[worker])
+	}
+
 	return &web.StatusData{
 		ShareCount:         shareCount,
 		MinerCount:         n.stratumSrv.SessionCount(),
@@ -1132,6 +1246,7 @@ func (n *Node) dashboardData() *web.StatusData {
 		TreeShares:         n.buildTreeData(),
 		OurPeerID:          n.p2pNode.ShortID(),
 		Peers:              peers,
+		Miners:             miners,
 	}
 }
 

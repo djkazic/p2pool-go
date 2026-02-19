@@ -44,6 +44,7 @@ type StatusData struct {
 	TreeShares         []TreeShare         `json:"tree_shares"`
 	OurPeerID          string              `json:"our_peer_id"`
 	Peers              []PeerInfo          `json:"peers"`
+	Miners             []MinerStat         `json:"miners"`
 }
 
 // PayoutInfo describes a single payout output for the dashboard.
@@ -69,6 +70,16 @@ type TreeShare struct {
 	Timestamp     int64  `json:"timestamp"`
 	IsBlock       bool   `json:"is_block"`
 	MainChain     bool   `json:"main_chain"`
+}
+
+// MinerStat describes a connected miner for the dashboard.
+type MinerStat struct {
+	Worker        string  `json:"worker"`
+	Hashrate      float64 `json:"hashrate"`
+	Difficulty    float64 `json:"difficulty"`
+	ShareCount    int     `json:"shares"`
+	LastShareTime int64   `json:"last_share_time"`
+	ConnectedSecs int64   `json:"connected_secs"`
 }
 
 // PeerInfo describes a connected peer for the dashboard.

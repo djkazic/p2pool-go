@@ -523,14 +523,14 @@ func TestLocalHashrate(t *testing.T) {
 	}
 
 	// One share → 0 (need at least 2)
-	n.recordLocalShare(1.0)
+	n.recordLocalShare(1.0, "test")
 	if n.localHashrate() != 0 {
 		t.Error("expected 0 with only 1 share")
 	}
 
 	// Two shares close together → 0 (below minElapsed of 30s)
 	time.Sleep(time.Millisecond)
-	n.recordLocalShare(1.0)
+	n.recordLocalShare(1.0, "test")
 	if n.localHashrate() != 0 {
 		t.Error("expected 0 when elapsed < minElapsed")
 	}

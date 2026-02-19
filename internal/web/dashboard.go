@@ -54,6 +54,7 @@ tr.golden td.hash:hover{color:#ffcc33}
 .info-item{font-size:0.75rem;color:#1a9a1a}
 .info-item span{color:#20cc20}
 .no-data{color:#0f5f0f;font-size:0.85rem;font-style:italic;padding:16px 0}
+tr.no-shares td{color:#0f5f0f}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#33ff33;margin-right:6px;animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
 
@@ -114,6 +115,14 @@ body::after{content:"";position:fixed;top:0;left:0;width:100%;height:100%;backgr
     <h2>Local Hashrate</h2>
     <div class="graph-wrap"><canvas id="graph-local"></canvas></div>
   </div>
+</div>
+
+<div class="card section" id="miners-card">
+  <h2>Connected Miners</h2>
+  <table>
+    <thead><tr><th>Worker</th><th>Hashrate</th><th>Difficulty</th><th>Shares (10m)</th><th>Last Share</th><th>Connected</th></tr></thead>
+    <tbody id="miners-table"><tr><td colspan="6" class="no-data">No miners connected</td></tr></tbody>
+  </table>
 </div>
 
 <div class="grid2">
@@ -1064,6 +1073,22 @@ function update(data){
     ptbody.innerHTML=ph;
   }else{
     ptbl.style.display="none";
+  }
+
+  // Connected Miners table
+  var mtb=document.getElementById("miners-table");
+  var minerList=data.miners||[];
+  if(minerList.length===0){
+    mtb.innerHTML='<tr><td colspan="6" class="no-data">No miners connected</td></tr>';
+  }else{
+    minerList.sort(function(a,b){return b.hashrate-a.hashrate;});
+    var mh="";
+    for(var i=0;i<minerList.length;i++){
+      var m=minerList[i];
+      var cls=m.shares===0?' class="no-shares"':"";
+      mh+='<tr'+cls+'><td>'+esc(m.worker)+'</td><td>'+fmtHash(m.hashrate)+'</td><td>'+fmtDiff(m.difficulty)+'</td><td>'+m.shares+'</td><td>'+(m.last_share_time?timeAgo(m.last_share_time):"-")+'</td><td>'+fmtUptime(m.connected_secs)+'</td></tr>';
+    }
+    mtb.innerHTML=mh;
   }
 
   // Seed graph history from server on first load, then append

@@ -466,6 +466,14 @@ func TestShareChain_PruneOldShares(t *testing.T) {
 		prev = s.Hash()
 	}
 
+	tip, ok := chain.Tip()
+	if !ok {
+		t.Fatal("chain should have tip")
+	}
+	if tip.Hash() != prev {
+		t.Error("tip should be the last share added")
+	}
+
 	//remove the last 5 minutes of shares (10 shares at 30s intervals)
 	prunedShares := chain.PruneOldShares(chainLen - 10)
 

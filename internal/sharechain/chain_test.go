@@ -380,48 +380,6 @@ func TestShareChain_ReorgEventFields(t *testing.T) {
 		t.Error("new tip should differ from old tip")
 	}
 }
-func TestShareChain_PruneOldShares(t *testing.T) {
-	store := NewMemoryStore()
-	diffCalc := NewDifficultyCalculator(30 * time.Second)
-	const windowSize = 25
-	// Creates an empty chain
-	chain := NewShareChain(store, diffCalc, windowSize, testNetwork, testLogger())
-
-	//The chain will be populated with windowSize*2 + 10 shares
-	// This will mimic a real scenario where the chain removes the older 5 minutes of shares,
-	// and keeps a length of windowSize*2 shares
-	chainLen := windowSize*2 + 10
-	// Add shares with timestamps 30s apart
-	baseTime := time.Now().Add(-time.Duration(chainLen) * 30 * time.Second)
-	prev := [32]byte{}
-	for i := 0; i < chainLen; i++ {
-		s := makeTestShare(prev, testMiner1, uint32(baseTime.Unix()+int64(i*30)))
-		if err := chain.AddShare(s); err != nil {
-			t.Fatalf("AddShare[%d]: %v", i, err)
-		}
-		prev = s.Hash()
-	}
-
-	//remove the last 5 minutes of shares (10 shares at 30s intervals)
-	prunedShares := chain.PruneOldShares(chainLen - 10)
-
-	if prunedShares != 10 {
-		t.Errorf("pruned shares = %d, want 10", prunedShares)
-	}
-
-	if chain.Count() != chainLen-10 {
-		t.Errorf("count after prune = %d, want %d", chain.Count(), chainLen-10)
-	}
-
-	// The tip should still be the same after pruning
-	postTip, ok := chain.Tip()
-	if !ok {
-		t.Fatal("chain should have tip after prune")
-	}
-	if postTip.Hash() != prev {
-		t.Error("tip should be unchanged after prune")
-	}
-}
 func TestShareChain_PruneOrphans(t *testing.T) {
 	store := NewMemoryStore()
 	diffCalc := NewDifficultyCalculator(30 * time.Second)
@@ -486,6 +444,48 @@ func TestShareChain_PruneOrphans(t *testing.T) {
 	}
 }
 
+func TestShareChain_PruneOldShares(t *testing.T) {
+	store := NewMemoryStore()
+	diffCalc := NewDifficultyCalculator(30 * time.Second)
+	const windowSize = 25
+	// Creates an empty chain
+	chain := NewShareChain(store, diffCalc, windowSize, testNetwork, testLogger())
+
+	//The chain will be populated with windowSize*2 + 10 shares
+	// This will mimic a real scenario where the chain removes the older 5 minutes of shares,
+	// and keeps a length of windowSize*2 shares
+	chainLen := windowSize*2 + 10
+	// Add shares with timestamps 30s apart
+	baseTime := time.Now().Add(-time.Duration(chainLen) * 30 * time.Second)
+	prev := [32]byte{}
+	for i := 0; i < chainLen; i++ {
+		s := makeTestShare(prev, testMiner1, uint32(baseTime.Unix()+int64(i*30)))
+		if err := chain.AddShare(s); err != nil {
+			t.Fatalf("AddShare[%d]: %v", i, err)
+		}
+		prev = s.Hash()
+	}
+
+	//remove the last 5 minutes of shares (10 shares at 30s intervals)
+	prunedShares := chain.PruneOldShares(chainLen - 10)
+
+	if prunedShares != 10 {
+		t.Errorf("pruned shares = %d, want 10", prunedShares)
+	}
+
+	if chain.Count() != chainLen-10 {
+		t.Errorf("count after prune = %d, want %d", chain.Count(), chainLen-10)
+	}
+
+	// The tip should still be the same after pruning
+	postTip, ok := chain.Tip()
+	if !ok {
+		t.Fatal("chain should have tip after prune")
+	}
+	if postTip.Hash() != prev {
+		t.Error("tip should be unchanged after prune")
+	}
+}
 func TestMemoryStore_DeleteAndAllHashes(t *testing.T) {
 	store := NewMemoryStore()
 

@@ -208,6 +208,16 @@ function esc(s){
 }
 var _net="",_ourAddr="",_prevTip="";
 var _shareSound=new Audio("/assets/share_found.mp3");
+_shareSound.preload="auto";
+var _audioUnlocked=false;
+function _unlockAudio(){
+  if(_audioUnlocked)return;
+  var v=_shareSound.volume;
+  _shareSound.volume=0;
+  _shareSound.play().then(function(){_shareSound.pause();_shareSound.currentTime=0;_shareSound.volume=v;_audioUnlocked=true;}).catch(function(){});
+}
+document.addEventListener("click",_unlockAudio,{once:true});
+document.addEventListener("keydown",_unlockAudio,{once:true});
 function addrLink(addr){
   if(!addr)return"-";
   var prefix=(_net==="mainnet"||!_net)?"":"/"+ _net.replace("testnet3","testnet");

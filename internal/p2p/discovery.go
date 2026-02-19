@@ -136,9 +136,10 @@ func (d *Discovery) HandlePeerFound(pi peer.AddrInfo) {
 func (d *Discovery) advertiseLoop(ctx context.Context, rd *drouting.RoutingDiscovery) {
 	backoff := 5 * time.Second
 	const maxBackoff = 60 * time.Second
+	const defaultTTL = 10 * time.Minute
 
 	for {
-		_, err := rd.Advertise(ctx, DHTNamespace)
+		ttl, err := rd.Advertise(ctx, DHTNamespace)
 		if err != nil {
 			d.logger.Debug("DHT advertise error", zap.Error(err), zap.Duration("retry_in", backoff))
 			select {
@@ -153,13 +154,17 @@ func (d *Discovery) advertiseLoop(ctx context.Context, rd *drouting.RoutingDisco
 			continue
 		}
 
-		// Success — reset backoff and wait for context cancellation.
-		// Advertise blocks until TTL expires, so we loop back to re-advertise.
+		// Re-advertise when the TTL expires. Advertise returns immediately,
+		// so we must sleep to avoid a hot loop.
 		backoff = 5 * time.Second
+		reAdvertise := defaultTTL
+		if ttl > 0 {
+			reAdvertise = ttl
+		}
 		select {
 		case <-ctx.Done():
 			return
-		default:
+		case <-time.After(reAdvertise):
 		}
 	}
 }

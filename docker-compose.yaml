@@ -11,7 +11,7 @@ services:
       - BITCOIN_RPC_USER=${BITCOIN_RPC_USER}
       - BITCOIN_RPC_PASSWORD=${BITCOIN_RPC_PASSWORD}
       - LOG_LEVEL=${LOG_LEVEL:-info}
-    command: ["-address", "${PAYOUT_ADDRESS}", "-network", "mainnet", "-rpc-port", "8332"]
+    command: ["-address", "${PAYOUT_ADDRESS}"]
 
 volumes:
   p2pool-data:

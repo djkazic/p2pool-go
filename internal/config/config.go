@@ -36,14 +36,14 @@ type Config struct {
 	LogLevel string `mapstructure:"log-level"`
 }
 
-// DefaultConfig returns a Config with sensible defaults for Bitcoin testnet.
+// DefaultConfig returns a Config with sensible defaults for Bitcoin mainnet.
 func DefaultConfig() *Config {
 	return &Config{
 		BitcoinRPCHost:     "127.0.0.1",
-		BitcoinRPCPort:     18332,
+		BitcoinRPCPort:     8332,
 		BitcoinRPCUser:     "user",
 		BitcoinRPCPassword: "pass",
-		BitcoinNetwork:     "testnet3",
+		BitcoinNetwork:     "mainnet",
 
 		StratumPort:     3333,
 		StartDifficulty: 100000,

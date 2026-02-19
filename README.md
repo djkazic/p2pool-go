@@ -22,7 +22,6 @@ p2pool-go maintains a **sharechain** — a parallel blockchain of lower-difficul
 Add to `~/.bitcoin/bitcoin.conf`:
 
 ```ini
-testnet=1
 server=1
 rpcuser=your_rpc_user
 rpcpassword=your_rpc_password
@@ -32,8 +31,8 @@ rpcallowip=127.0.0.1
 Start and wait for sync:
 
 ```bash
-bitcoind -testnet -daemon
-bitcoin-cli -testnet getblockchaininfo
+bitcoind -daemon
+bitcoin-cli getblockchaininfo
 ```
 
 ### 3. Build and Run
@@ -44,7 +43,7 @@ cd p2pool-go
 make build
 
 ./build/p2pool \
-  -address tb1qyourtestnetaddress \
+  -address bc1qyourmainnetaddress \
   -rpc-user your_rpc_user \
   -rpc-password your_rpc_password
 ```
@@ -208,12 +207,12 @@ Once connected to any peer, the Kademlia DHT propagates peer info so nodes disco
 
 | Flag | Default | Description |
 |---|---|---|
-| `-address` | *(required)* | Payout address (bech32: `tb1...` for testnet, `bc1...` for mainnet) |
+| `-address` | *(required)* | Payout address (bech32: `bc1...` for mainnet, `tb1...` for testnet) |
 | `-rpc-host` | `127.0.0.1` | bitcoind RPC host |
-| `-rpc-port` | `18332` | bitcoind RPC port |
+| `-rpc-port` | `8332` | bitcoind RPC port |
 | `-rpc-user` | `user` | bitcoind RPC username |
 | `-rpc-password` | `pass` | bitcoind RPC password |
-| `-network` | `testnet3` | Bitcoin network (`testnet3`, `mainnet`, `regtest`) |
+| `-network` | `mainnet` | Bitcoin network (`mainnet`, `testnet3`, `regtest`) |
 | `-stratum-port` | `3333` | Stratum server port (also serves HTTP dashboard) |
 | `-start-difficulty` | `100000` | Initial stratum difficulty (vardiff adjusts from here) |
 | `-p2p-port` | `9171` | P2P listen port |
@@ -235,20 +234,18 @@ Environment variables override flags (useful for containers):
 | `P2POOL_BOOTNODES` | `-bootnodes` |
 | `LOG_LEVEL` | `-log-level` |
 
-### Running on Mainnet
+### Running on Testnet
 
-Defaults are configured for testnet. For mainnet:
+Defaults are configured for mainnet. For testnet:
 
 ```bash
 ./build/p2pool \
-  -address bc1qyourmainnetaddress \
-  -network mainnet \
-  -rpc-port 8332 \
+  -address tb1qyourtestnetaddress \
+  -network testnet3 \
+  -rpc-port 18332 \
   -rpc-user your_rpc_user \
   -rpc-password your_rpc_password
 ```
-
-The node logs a warning at startup if not running on mainnet.
 
 ### Default Ports
 
@@ -318,7 +315,7 @@ make test-verbose   # Verbose test output
 make vet            # go vet
 make fmt            # go fmt
 make clean          # Remove build artifacts
-make run ARGS="-address tb1q..."   # Build and run
+make run ARGS="-address bc1q..."   # Build and run
 ```
 
 ## License

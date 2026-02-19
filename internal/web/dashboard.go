@@ -20,7 +20,7 @@ h1{font-size:1.5rem;font-weight:600;color:#33ff33;margin-bottom:4px;text-shadow:
 .card .value.accent{color:#33ff33}
 .section{margin-bottom:24px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
-@media(max-width:900px){.grid2{grid-template-columns:1fr}}
+@media(max-width:900px){.grid2{grid-template-columns:1fr}#miners-card{overflow-x:auto}}
 .card h2{font-size:0.9rem;font-weight:600;color:#33ff33;margin-bottom:12px;text-shadow:0 0 8px rgba(51,255,51,0.4),0 0 20px rgba(51,255,51,0.15)}
 table{width:100%;border-collapse:collapse}
 th{text-align:left;color:#1a9a1a;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.5px;padding:6px 8px;border-bottom:1px solid #0f2a0f}

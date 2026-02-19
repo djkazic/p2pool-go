@@ -3,14 +3,16 @@ package p2p
 import (
 	"context"
 	"fmt"
+	"io"
+	"path/filepath"
 	"time"
 
+	leveldb "github.com/ipfs/go-ds-leveldb"
+	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
-
-	dht "github.com/libp2p/go-libp2p-kad-dht"
 	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
 
 	"go.uber.org/zap"
@@ -29,10 +31,11 @@ type Discovery struct {
 	host   host.Host
 	logger *zap.Logger
 	dht    *dht.IpfsDHT
+	dhtDS  io.Closer // persistent DHT datastore (nil if in-memory)
 }
 
 // NewDiscovery creates a new discovery service.
-func NewDiscovery(ctx context.Context, h host.Host, enableMDNS bool, bootnodes []string, savedPeers []peer.AddrInfo, logger *zap.Logger) (*Discovery, error) {
+func NewDiscovery(ctx context.Context, h host.Host, enableMDNS bool, bootnodes []string, savedPeers []peer.AddrInfo, dataDir string, logger *zap.Logger) (*Discovery, error) {
 	d := &Discovery{
 		host:   h,
 		logger: logger,
@@ -60,9 +63,23 @@ func NewDiscovery(ctx context.Context, h host.Host, enableMDNS bool, bootnodes [
 		}
 	}
 
-	// Setup Kademlia DHT
-	kadDHT, err := dht.New(ctx, h, dht.Mode(dht.ModeAutoServer))
+	// Open persistent LevelDB datastore for DHT routing table
+	dhtOpts := []dht.Option{dht.Mode(dht.ModeAutoServer)}
+	ds, err := leveldb.NewDatastore(filepath.Join(dataDir, "dht"), nil)
 	if err != nil {
+		logger.Warn("failed to open DHT datastore, falling back to in-memory", zap.Error(err))
+	} else {
+		d.dhtDS = ds
+		dhtOpts = append(dhtOpts, dht.Datastore(ds))
+		logger.Info("DHT using persistent datastore")
+	}
+
+	// Setup Kademlia DHT
+	kadDHT, err := dht.New(ctx, h, dhtOpts...)
+	if err != nil {
+		if d.dhtDS != nil {
+			d.dhtDS.Close()
+		}
 		return nil, fmt.Errorf("create DHT: %w", err)
 	}
 	d.dht = kadDHT
@@ -91,6 +108,17 @@ func NewDiscovery(ctx context.Context, h host.Host, enableMDNS bool, bootnodes [
 	go d.discoverLoop(ctx, routingDiscovery)
 
 	return d, nil
+}
+
+// Close shuts down the DHT and its persistent datastore.
+func (d *Discovery) Close() error {
+	if err := d.dht.Close(); err != nil {
+		d.logger.Warn("DHT close error", zap.Error(err))
+	}
+	if d.dhtDS != nil {
+		return d.dhtDS.Close()
+	}
+	return nil
 }
 
 // HandlePeerFound is called by mDNS when a new peer is found.

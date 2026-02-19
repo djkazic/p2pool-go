@@ -106,7 +106,7 @@ func (n *Node) StartDiscovery(ctx context.Context, enableMDNS bool, bootnodes []
 		n.Logger.Info("loaded saved peers", zap.Int("count", len(savedPeers)))
 	}
 
-	n.discovery, err = NewDiscovery(ctx, n.Host, enableMDNS, bootnodes, savedPeers, n.Logger)
+	n.discovery, err = NewDiscovery(ctx, n.Host, enableMDNS, bootnodes, savedPeers, n.dataDir, n.Logger)
 	if err != nil {
 		return fmt.Errorf("setup discovery: %w", err)
 	}
@@ -153,6 +153,9 @@ func (n *Node) Syncer() *Syncer {
 func (n *Node) Close() error {
 	if err := n.SavePeers(); err != nil {
 		n.Logger.Warn("failed to save peers on shutdown", zap.Error(err))
+	}
+	if n.discovery != nil {
+		n.discovery.Close()
 	}
 	return n.Host.Close()
 }

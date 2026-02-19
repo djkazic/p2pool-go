@@ -1063,11 +1063,31 @@ func (n *Node) lookupShare(hashHex string) *web.ShareDetail {
 	}
 }
 
-// poolHashrateFromShares computes pool hashrate from a slice of shares.
+// hashrateWindow is the time window used for pool hashrate estimation.
+// Shorter than the PPLNS window so hashrate responds to changes in minutes,
+// not days.
+const hashrateWindow = 30 * time.Minute
+
+// poolHashrateFromShares computes pool hashrate from a slice of shares,
+// using only shares within hashrateWindow of the newest share.
 func poolHashrateFromShares(shares []*types.Share) float64 {
 	if len(shares) < 2 {
 		return 0
 	}
+
+	newest := shares[0].Header.Timestamp
+	cutoff := newest - uint32(hashrateWindow.Seconds())
+
+	// Trim to shares within the hashrate window.
+	end := len(shares)
+	for end > 1 && shares[end-1].Header.Timestamp < cutoff {
+		end--
+	}
+	shares = shares[:end]
+	if len(shares) < 2 {
+		return 0
+	}
+
 	diff1 := util.CompactToTarget(0x1d00ffff)
 	diff1Float := new(big.Float).SetInt(diff1)
 	// Exclude the oldest share's work — it was done before the measurement
@@ -1082,7 +1102,6 @@ func poolHashrateFromShares(shares []*types.Share) float64 {
 			totalWork += shareDiff
 		}
 	}
-	newest := shares[0].Header.Timestamp
 	oldest := shares[len(shares)-1].Header.Timestamp
 	elapsed := float64(newest - oldest)
 	if elapsed <= 0 {

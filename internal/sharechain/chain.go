@@ -329,9 +329,9 @@ func (sc *ShareChain) PruneOrphans() int {
 	return pruned
 }
 
-// PruneOldShares removes shares beyond the most recent maxKeep on the main chain.
+// PruneToDepth removes shares beyond the most recent maxKeep on the main chain.
 // Returns the number of shares pruned.
-func (sc *ShareChain) PruneOldShares(maxKeep int) int {
+func (sc *ShareChain) PruneToDepth(maxKeep int) int {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 
@@ -348,13 +348,7 @@ func (sc *ShareChain) PruneOldShares(maxKeep int) int {
 		keepSet[s.Hash()] = struct{}{}
 	}
 
-	allHashes := sc.store.AllHashes()
-	var toDelete [][32]byte
-	for _, h := range allHashes {
-		if _, keep := keepSet[h]; !keep {
-			toDelete = append(toDelete, h)
-		}
-	}
+	toDelete := sc.store.HashesNotIn(keepSet)
 
 	if len(toDelete) == 0 {
 		return 0

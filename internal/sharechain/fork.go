@@ -63,8 +63,9 @@ func (fc *ForkChoice) SelectTip(currentTip, candidate [32]byte, windowSize int) 
 	}
 
 	// Compare cumulative work
-	currentWork := fc.ChainWork(currentTip, windowSize)
-	candidateWork := fc.ChainWork(candidate, windowSize)
+	_, depthA, depthB := fc.FindCommonAncestor(currentTip, candidate, windowSize)
+	currentWork := fc.ChainWork(currentTip, depthA)
+	candidateWork := fc.ChainWork(candidate, depthB)
 
 	cmp := candidateWork.Cmp(currentWork)
 	if cmp > 0 {

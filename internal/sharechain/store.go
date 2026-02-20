@@ -21,6 +21,8 @@ type ShareStore interface {
 	Delete(hash [32]byte) error
 	// AllHashes returns the hashes of all shares in the store.
 	AllHashes() [][32]byte
+	// HashesNotIn returns all hashes in the store that are not in the given keep set.
+	HashesNotIn(keep map[[32]byte]struct{}) [][32]byte
 	Close() error
 }
 
@@ -114,6 +116,22 @@ func (s *MemoryStore) AllHashes() [][32]byte {
 		hashes = append(hashes, h)
 	}
 	return hashes
+}
+
+func (s *MemoryStore) HashesNotIn(keep map[[32]byte]struct{}) [][32]byte {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Collect hashes that are in the store but not in the keep set
+	toDelete := make([][32]byte, 0, len(s.shares)-len(keep))
+	// Iterate over the whole store and check if the hash is in the keep set.
+	// If not, add it to the list of hashes to delete.
+	for h := range s.shares {
+		if _, ok := keep[h]; !ok {
+			toDelete = append(toDelete, h)
+		}
+	}
+	return toDelete
 }
 
 func (s *MemoryStore) Close() error { return nil }

@@ -62,10 +62,17 @@ func (fc *ForkChoice) SelectTip(currentTip, candidate [32]byte, windowSize int) 
 		return currentTip
 	}
 
-	// Compare cumulative work
-	currentWork := fc.ChainWork(currentTip, windowSize)
-	candidateWork := fc.ChainWork(candidate, windowSize)
+	// Compare cumulative work using the full store depth, not windowSize.
+	// windowSize controls how far back difficulty adjustment looks, but chain
+	// work must be computed over the full chain history, otherwise the window
+	// clips the ancestor walk asymmetrically between two candidates (e.g. a
+	// long-standing tip vs a newly added share), producing incorrect work totals
+	// that trigger spurious reorgs.
+	depth := fc.store.Count() + 1
+	currentWork := fc.ChainWork(currentTip, depth)
+	candidateWork := fc.ChainWork(candidate, depth)
 
+	// Compare cumulative work
 	cmp := candidateWork.Cmp(currentWork)
 	if cmp > 0 {
 		return candidate

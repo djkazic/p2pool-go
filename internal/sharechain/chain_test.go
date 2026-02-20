@@ -457,18 +457,23 @@ func TestShareChain_PruneOldShares(t *testing.T) {
 	chainLen := windowSize*2 + 10
 	// Add shares with timestamps 30s apart
 	baseTime := time.Now().Add(-time.Duration(chainLen) * 30 * time.Second)
-	for i := 0; i < chainLen; i++ {
-		lastTip, ok := chain.Tip()
-		if !ok {
-			t.Fatal("chain should have tip when adding shares")
-		}
-		s := makeTestShare(lastTip.Hash(), testMiner1, uint32(baseTime.Unix()+int64(i*30)))
+
+	// Genesis
+	genesis := makeTestShare([32]byte{}, testMiner1, uint32(baseTime.Unix()))
+	if err := chain.AddShare(genesis); err != nil {
+		t.Fatalf("AddShare genesis: %v", err)
+	}
+	genesisHash := genesis.Hash()
+
+	prev := genesisHash
+	for i := 0; i < chainLen-1; i++ {
+		s := makeTestShare(prev, testMiner1, uint32(baseTime.Unix()+int64((i+1)*30)))
 		if err := chain.AddShare(s); err != nil {
-			t.Fatalf("AddShare[%d]: %v", i, err)
+			t.Fatalf("AddShare main[%d]: %v", i, err)
 		}
+		prev = s.Hash()
 	}
 
-	prev, _ := chain.Tip()
 	//remove the last 5 minutes of shares (10 shares at 30s intervals)
 	prunedShares := chain.PruneOldShares(chainLen - 10)
 
@@ -485,7 +490,7 @@ func TestShareChain_PruneOldShares(t *testing.T) {
 	if !ok {
 		t.Fatal("chain should have tip after prune")
 	}
-	if postTip.Hash() != prev.Hash() {
+	if postTip.Hash() != prev {
 		t.Error("tip should be unchanged after prune")
 	}
 }

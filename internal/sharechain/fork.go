@@ -63,9 +63,27 @@ func (fc *ForkChoice) SelectTip(currentTip, candidate [32]byte, windowSize int) 
 	}
 
 	// Compare cumulative work
+	commonAncestor, depthA, depthB := fc.FindCommonAncestor(currentTip, candidate, windowSize)
+
+	// They have a common ancestor, compare chain work from that point
+	if commonAncestor != zeroHash {
+		currentWork := fc.ChainWork(currentTip, depthA)
+		candidateWork := fc.ChainWork(candidate, depthB)
+
+		cmp := candidateWork.Cmp(currentWork)
+		if cmp > 0 {
+			return candidate
+		}
+		if cmp < 0 {
+			return currentTip
+		}
+	}
+
+	// The current tip and candidate do not share a common ancestor within the window
+	// we must handle both as separate chains by walking windowSize blocks on each fork and
+	// sum up the work
 	currentWork := fc.ChainWork(currentTip, windowSize)
 	candidateWork := fc.ChainWork(candidate, windowSize)
-
 	cmp := candidateWork.Cmp(currentWork)
 	if cmp > 0 {
 		return candidate

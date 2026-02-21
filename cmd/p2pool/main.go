@@ -41,6 +41,7 @@ func run() error {
 	flag.Float64Var(&cfg.StartDifficulty, "start-difficulty", cfg.StartDifficulty, "initial stratum difficulty for new miners (vardiff adjusts from here)")
 	flag.IntVar(&cfg.P2PPort, "p2p-port", cfg.P2PPort, "p2p network listen port")
 	flag.BoolVar(&cfg.EnableMDNS, "mdns", cfg.EnableMDNS, "enable mDNS peer discovery on LAN")
+	flag.BoolVar(&cfg.DHTServer, "dht-server", cfg.DHTServer, "force DHT server mode (use on bootnodes / public nodes)")
 	flag.StringVar(&cfg.DataDir, "data-dir", cfg.DataDir, "directory for persistent data")
 	flag.StringVar(&cfg.LogLevel, "log-level", cfg.LogLevel, "log level (debug, info, warn, error)")
 

@@ -35,7 +35,7 @@ type Discovery struct {
 }
 
 // NewDiscovery creates a new discovery service.
-func NewDiscovery(ctx context.Context, h host.Host, enableMDNS bool, bootnodes []string, savedPeers []peer.AddrInfo, dataDir string, logger *zap.Logger) (*Discovery, error) {
+func NewDiscovery(ctx context.Context, h host.Host, enableMDNS bool, bootnodes []string, savedPeers []peer.AddrInfo, dataDir string, dhtServer bool, logger *zap.Logger) (*Discovery, error) {
 	d := &Discovery{
 		host:   h,
 		logger: logger,
@@ -64,7 +64,12 @@ func NewDiscovery(ctx context.Context, h host.Host, enableMDNS bool, bootnodes [
 	}
 
 	// Open persistent LevelDB datastore for DHT routing table
-	dhtOpts := []dht.Option{dht.Mode(dht.ModeAutoServer)}
+	dhtMode := dht.ModeAutoServer
+	if dhtServer {
+		dhtMode = dht.ModeServer
+		logger.Info("DHT forced to server mode")
+	}
+	dhtOpts := []dht.Option{dht.Mode(dhtMode)}
 	ds, err := leveldb.NewDatastore(filepath.Join(dataDir, "dht"), nil)
 	if err != nil {
 		logger.Warn("failed to open DHT datastore, falling back to in-memory", zap.Error(err))
@@ -84,11 +89,10 @@ func NewDiscovery(ctx context.Context, h host.Host, enableMDNS bool, bootnodes [
 	}
 	d.dht = kadDHT
 
-	if err := kadDHT.Bootstrap(ctx); err != nil {
-		return nil, fmt.Errorf("bootstrap DHT: %w", err)
-	}
-
-	// Connect to bootnodes
+	// Connect to bootnodes BEFORE bootstrapping so the initial routing
+	// table refresh has peers to query. Without this, Bootstrap()'s
+	// refresh finds an empty table and the DHT stays inert until the
+	// next periodic refresh (~10 minutes later).
 	for _, bn := range bootnodes {
 		addr, err := peer.AddrInfoFromString(bn)
 		if err != nil {
@@ -100,6 +104,25 @@ func NewDiscovery(ctx context.Context, h host.Host, enableMDNS bool, bootnodes [
 		} else {
 			logger.Info("connected to bootnode", zap.String("peer", addr.ID.String()))
 		}
+	}
+
+	if err := kadDHT.Bootstrap(ctx); err != nil {
+		return nil, fmt.Errorf("bootstrap DHT: %w", err)
+	}
+
+	// Bootstrap() fires a non-blocking RefreshNoWait(). Wait for the
+	// routing table to actually populate before starting the
+	// advertise/discover loops — otherwise they spin on an empty table.
+	refreshCtx, refreshCancel := context.WithTimeout(ctx, 15*time.Second)
+	defer refreshCancel()
+	select {
+	case err := <-kadDHT.RefreshRoutingTable():
+		if err != nil {
+			logger.Warn("DHT routing table refresh error", zap.Error(err))
+		}
+		logger.Info("DHT routing table ready", zap.Int("peers", kadDHT.RoutingTable().Size()))
+	case <-refreshCtx.Done():
+		logger.Warn("DHT routing table refresh timed out", zap.Int("peers", kadDHT.RoutingTable().Size()))
 	}
 
 	// Start routing discovery
@@ -133,30 +156,43 @@ func (d *Discovery) HandlePeerFound(pi peer.AddrInfo) {
 	}
 }
 
+// waitForRoutingPeers blocks until the DHT routing table has at least one
+// peer or the context is cancelled. This avoids hammering Advertise/FindPeers
+// against an empty table (e.g. on a bootnode that has no bootnodes of its own).
+func (d *Discovery) waitForRoutingPeers(ctx context.Context) bool {
+	const pollInterval = 5 * time.Second
+	for d.dht.RoutingTable().Size() == 0 {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(pollInterval):
+		}
+	}
+	return true
+}
+
 func (d *Discovery) advertiseLoop(ctx context.Context, rd *drouting.RoutingDiscovery) {
-	backoff := 5 * time.Second
-	const maxBackoff = 60 * time.Second
 	const defaultTTL = 10 * time.Minute
 
 	for {
+		// Wait for at least one routing table peer before attempting to advertise.
+		if !d.waitForRoutingPeers(ctx) {
+			return
+		}
+
 		ttl, err := rd.Advertise(ctx, DHTNamespace)
 		if err != nil {
-			d.logger.Debug("DHT advertise error", zap.Error(err), zap.Duration("retry_in", backoff))
+			d.logger.Debug("DHT advertise error", zap.Error(err))
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(backoff):
-			}
-			backoff *= 2
-			if backoff > maxBackoff {
-				backoff = maxBackoff
+			case <-time.After(5 * time.Second):
 			}
 			continue
 		}
 
 		// Re-advertise when the TTL expires. Advertise returns immediately,
 		// so we must sleep to avoid a hot loop.
-		backoff = 5 * time.Second
 		reAdvertise := defaultTTL
 		if ttl > 0 {
 			reAdvertise = ttl
@@ -174,9 +210,14 @@ func (d *Discovery) discoverLoop(ctx context.Context, rd *drouting.RoutingDiscov
 	const maxBackoff = 5 * time.Minute
 
 	for {
+		// Wait for at least one routing table peer before attempting to discover.
+		if !d.waitForRoutingPeers(ctx) {
+			return
+		}
+
 		peerCh, err := rd.FindPeers(ctx, DHTNamespace)
 		if err != nil {
-			d.logger.Warn("DHT find peers error", zap.Error(err), zap.Duration("retry_in", backoff))
+			d.logger.Debug("DHT find peers error", zap.Error(err), zap.Duration("retry_in", backoff))
 			select {
 			case <-ctx.Done():
 				return

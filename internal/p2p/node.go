@@ -98,7 +98,7 @@ func NewNode(ctx context.Context, listenPort int, dataDir string, logger *zap.Lo
 
 // StartDiscovery begins mDNS and DHT peer discovery. Must be called after
 // all stream handlers are registered (InitSyncer, etc.).
-func (n *Node) StartDiscovery(ctx context.Context, enableMDNS bool, bootnodes []string) error {
+func (n *Node) StartDiscovery(ctx context.Context, enableMDNS bool, bootnodes []string, dhtServer bool) error {
 	savedPeers, err := LoadPeers(n.dataDir)
 	if err != nil {
 		n.Logger.Warn("failed to load saved peers", zap.Error(err))
@@ -106,7 +106,7 @@ func (n *Node) StartDiscovery(ctx context.Context, enableMDNS bool, bootnodes []
 		n.Logger.Info("loaded saved peers", zap.Int("count", len(savedPeers)))
 	}
 
-	n.discovery, err = NewDiscovery(ctx, n.Host, enableMDNS, bootnodes, savedPeers, n.dataDir, n.Logger)
+	n.discovery, err = NewDiscovery(ctx, n.Host, enableMDNS, bootnodes, savedPeers, n.dataDir, dhtServer, n.Logger)
 	if err != nil {
 		return fmt.Errorf("setup discovery: %w", err)
 	}

@@ -22,6 +22,7 @@ type Config struct {
 	P2PPort      int      `mapstructure:"p2p-port"`
 	P2PBootnodes []string `mapstructure:"p2p-bootnodes"`
 	EnableMDNS   bool     `mapstructure:"enable-mdns"`
+	DHTServer    bool     `mapstructure:"dht-server"`
 
 	// Sharechain
 	ShareTargetTime   time.Duration `mapstructure:"share-target-time"`

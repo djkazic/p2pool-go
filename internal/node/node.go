@@ -167,7 +167,7 @@ func (n *Node) Start(ctx context.Context) error {
 
 	// Now start discovery — peers will find us with all handlers registered
 	allBootnodes := append(config.DefaultBootnodes(n.config.BitcoinNetwork), n.config.P2PBootnodes...)
-	if err := n.p2pNode.StartDiscovery(ctx, n.config.EnableMDNS, allBootnodes); err != nil {
+	if err := n.p2pNode.StartDiscovery(ctx, n.config.EnableMDNS, allBootnodes, n.config.DHTServer); err != nil {
 		return fmt.Errorf("p2p discovery: %w", err)
 	}
 

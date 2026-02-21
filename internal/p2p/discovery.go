@@ -252,7 +252,6 @@ func (d *Discovery) discoverLoop(ctx context.Context, rd *drouting.RoutingDiscov
 		}
 
 		// Channel closed — retry after backoff.
-		d.logger.Debug("DHT peer channel closed, will retry", zap.Duration("retry_in", backoff))
 		select {
 		case <-ctx.Done():
 			return

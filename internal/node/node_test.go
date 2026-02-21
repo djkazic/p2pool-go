@@ -495,9 +495,10 @@ func TestPoolHashrateFromShares(t *testing.T) {
 
 	// Two shares 30 seconds apart with known target
 	target := util.CompactToTarget(0x207fffff)
+	now := uint32(time.Now().Unix())
 	shares := []*types.Share{
-		{Header: types.ShareHeader{Timestamp: 1700000030}, ShareTarget: target},
-		{Header: types.ShareHeader{Timestamp: 1700000000}, ShareTarget: target},
+		{Header: types.ShareHeader{Timestamp: now}, ShareTarget: target},
+		{Header: types.ShareHeader{Timestamp: now - 30}, ShareTarget: target},
 	}
 	hr := poolHashrateFromShares(shares)
 	if hr <= 0 {
@@ -506,8 +507,8 @@ func TestPoolHashrateFromShares(t *testing.T) {
 
 	// Same timestamp → 0 (division by zero guard)
 	sameTime := []*types.Share{
-		{Header: types.ShareHeader{Timestamp: 1700000000}, ShareTarget: target},
-		{Header: types.ShareHeader{Timestamp: 1700000000}, ShareTarget: target},
+		{Header: types.ShareHeader{Timestamp: now}, ShareTarget: target},
+		{Header: types.ShareHeader{Timestamp: now}, ShareTarget: target},
 	}
 	if poolHashrateFromShares(sameTime) != 0 {
 		t.Error("same timestamp should return 0")

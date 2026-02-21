@@ -849,7 +849,12 @@ func (n *Node) recordLocalShare(difficulty float64, worker string) {
 		difficulty: difficulty,
 		worker:     worker,
 	})
-	// Prune events older than the window
+	n.pruneLocalSharesLocked()
+}
+
+// pruneLocalSharesLocked removes shares older than the hashrate window.
+// Must be called with localSharesMu held.
+func (n *Node) pruneLocalSharesLocked() {
 	cutoff := time.Now().Add(-localHashrateWindow)
 	i := 0
 	for i < len(n.localShares) && n.localShares[i].time.Before(cutoff) {
@@ -864,6 +869,7 @@ func (n *Node) recordLocalShare(difficulty float64, worker string) {
 func (n *Node) localHashrate() float64 {
 	n.localSharesMu.Lock()
 	defer n.localSharesMu.Unlock()
+	n.pruneLocalSharesLocked()
 	// Require a minimum elapsed window to avoid wildly inflated estimates
 	// from a lucky burst of shares arriving nearly simultaneously.  The
 	// share count minimum is 2 (mathematical minimum); the elapsed floor
@@ -898,6 +904,7 @@ type minerShareStat struct {
 func (n *Node) minerShareStats() map[string]minerShareStat {
 	n.localSharesMu.Lock()
 	defer n.localSharesMu.Unlock()
+	n.pruneLocalSharesLocked()
 
 	if len(n.localShares) < 2 {
 		// Not enough data for hashrate estimation
@@ -1296,6 +1303,11 @@ func poolHashrateFromShares(shares []*types.Share) float64 {
 	}
 
 	newest := shares[0].Header.Timestamp
+	// If the newest share is older than the hashrate window, mining has stopped.
+	now := uint32(time.Now().Unix())
+	if now > newest && now-newest > uint32(hashrateWindow.Seconds()) {
+		return 0
+	}
 	cutoff := newest - uint32(hashrateWindow.Seconds())
 
 	// Trim to shares within the hashrate window.

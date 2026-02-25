@@ -159,6 +159,14 @@ func (n *Node) PeerCount() int {
 	return len(n.Host.Network().Peers())
 }
 
+// DHTSize returns the number of peers in the DHT routing table.
+func (n *Node) DHTSize() int {
+	if n.discovery != nil && n.discovery.dht != nil {
+		return n.discovery.dht.RoutingTable().Size()
+	}
+	return 0
+}
+
 // ConnectedPeers returns info about connected peers.
 func (n *Node) ConnectedPeers() []peer.ID {
 	return n.Host.Network().Peers()

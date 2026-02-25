@@ -62,6 +62,17 @@ func (fc *ForkChoice) SelectTip(currentTip, candidate [32]byte, windowSize int) 
 		return currentTip
 	}
 
+	// If the candidate directly extends the current tip, it always wins.
+	// This avoids a stale-tip problem: once the chain exceeds windowSize,
+	// a child has the same cumulative work as its parent (drops the oldest
+	// share, adds itself at the same difficulty = net zero), so work-based
+	// comparison would fall to a hash tiebreaker that fails ~50% of the
+	// time, causing the tip to stall and forks to accumulate.
+	candidateShare, _ := fc.store.Get(candidate)
+	if candidateShare != nil && candidateShare.PrevShareHash == currentTip {
+		return candidate
+	}
+
 	// Compare cumulative work
 	currentWork := fc.ChainWork(currentTip, windowSize)
 	candidateWork := fc.ChainWork(candidate, windowSize)
@@ -76,7 +87,6 @@ func (fc *ForkChoice) SelectTip(currentTip, candidate [32]byte, windowSize int) 
 
 	// Tie-breaking: lower hash wins (deterministic)
 	currentShare, _ := fc.store.Get(currentTip)
-	candidateShare, _ := fc.store.Get(candidate)
 	if currentShare != nil && candidateShare != nil {
 		currentHash := currentShare.Hash()
 		candidateHash := candidateShare.Hash()

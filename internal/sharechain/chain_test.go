@@ -273,6 +273,42 @@ func TestForkChoice_SelectTip(t *testing.T) {
 	}
 }
 
+func TestForkChoice_ChildAlwaysExtendsTip(t *testing.T) {
+	store := NewMemoryStore()
+	fc := NewForkChoice(store)
+
+	// Build a chain longer than the window size.
+	// With a small window (5), once the chain exceeds 5 shares, a child
+	// extending the tip has equal cumulative work (drops oldest, adds itself).
+	// The child must still always become the new tip.
+	windowSize := 5
+	var prevHash [32]byte
+	for i := 0; i < windowSize+3; i++ {
+		s := makeTestShare(prevHash, testMiner1, uint32(1700000000+i*30))
+		_ = store.Add(s)
+		prevHash = s.Hash()
+	}
+	currentTip := prevHash
+
+	// Add one more child extending the tip
+	child := makeTestShare(currentTip, testMiner1, uint32(1700000000+(windowSize+3)*30))
+	_ = store.Add(child)
+	childHash := child.Hash()
+
+	// Verify both have the same cumulative work (the bug condition)
+	currentWork := fc.ChainWork(currentTip, windowSize)
+	childWork := fc.ChainWork(childHash, windowSize)
+	if currentWork.Cmp(childWork) != 0 {
+		t.Logf("work differs (current=%s, child=%s) — test still valid but not exercising tie case", currentWork, childWork)
+	}
+
+	// The child must always win, regardless of hash comparison
+	selected := fc.SelectTip(currentTip, childHash, windowSize)
+	if selected != childHash {
+		t.Error("child extending the current tip must always become the new tip")
+	}
+}
+
 func TestForkChoice_FindCommonAncestor(t *testing.T) {
 	store := NewMemoryStore()
 	fc := NewForkChoice(store)

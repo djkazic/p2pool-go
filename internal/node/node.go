@@ -248,7 +248,7 @@ func (n *Node) eventLoop(ctx context.Context) {
 			if pruned := n.chain.PruneOrphans(); pruned > 0 {
 				n.logger.Info("pruned orphan shares", zap.Int("count", pruned))
 			}
-			n.chain.PruneOldShares(n.config.PPLNSWindowSize * 2)
+			n.chain.PruneOldShares(n.config.PPLNSWindowSize)
 		}
 	}
 }
@@ -791,6 +791,7 @@ func (n *Node) logStatus() {
 		zap.Int("shares", shareCount),
 		zap.Int("miners", minerCount),
 		zap.Int("peers", peerCount),
+		zap.Int("dht", n.p2pNode.DHTSize()),
 		zap.String("target", fmt.Sprintf("0x%08x", util.TargetToCompact(target))),
 		zap.Float64("difficulty", difficulty),
 	)

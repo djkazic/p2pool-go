@@ -416,7 +416,15 @@ func (sc *ShareChain) ValidateLoaded() error {
 	sc.validator.skipTimeChecks = true
 	defer func() { sc.validator.skipTimeChecks = false }()
 
-	for _, share := range ancestors {
+	// After pruning, the oldest shares lack full context: parent existence,
+	// difficulty history (72-share window), etc. Skip shares in the warmup
+	// zone — they were already validated when first accepted.
+	skip := DifficultyAdjustmentWindow + 1
+	if skip > len(ancestors) {
+		skip = len(ancestors)
+	}
+
+	for _, share := range ancestors[skip:] {
 		if err := sc.validator.ValidateShare(share); err != nil {
 			return fmt.Errorf("invalid share %x: %w", share.Hash(), err)
 		}

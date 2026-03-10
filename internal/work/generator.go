@@ -107,7 +107,7 @@ func (g *Generator) GenerateJob() (*JobData, error) {
 		PrevBlockHash:     tmpl.PreviousBlockHash,
 		Version:           fmt.Sprintf("%08x", tmpl.Version),
 		Bits:              tmpl.Bits,
-		CurTime:           fmt.Sprintf("%08x", tmpl.CurTime),
+		CurTime:           fmt.Sprintf("%08x", time.Now().Unix()),
 		CoinbaseValue:     tmpl.CoinbaseValue,
 		WitnessCommitment: tmpl.DefaultWitnessCommitment,
 		Network:           g.network,

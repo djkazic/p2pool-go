@@ -11,6 +11,9 @@ import (
 
 const (
 	// MaxTimeFuture is the maximum time a share's timestamp can be ahead of our clock.
+	// Job timestamps use max(bitcoind curtime, local time), so MTP drift is eliminated.
+	// The remaining slack covers ASIC ntime rolling (typically a few seconds between
+	// job refreshes) plus minor clock skew between nodes.
 	MaxTimeFuture = 2 * time.Minute
 
 	// MaxTimePast is the maximum time a share's timestamp can be behind the parent.

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 	"sync"
+	"time"
 
 	"github.com/djkazic/p2pool-go/internal/types"
 	"github.com/djkazic/p2pool-go/pkg/util"
@@ -114,6 +115,11 @@ func (sc *ShareChain) AddShare(share *types.Share) error {
 		return fmt.Errorf("invalid share: %w", err)
 	}
 
+	// Record when we first saw this share
+	if share.ReceivedAt.IsZero() {
+		share.ReceivedAt = time.Now()
+	}
+
 	// Store
 	if err := sc.store.Add(share); err != nil {
 		return fmt.Errorf("store share: %w", err)
@@ -182,6 +188,10 @@ func (sc *ShareChain) AddShareQuiet(share *types.Share) error {
 
 	if err := sc.validator.ValidateShare(share); err != nil {
 		return fmt.Errorf("invalid share: %w", err)
+	}
+
+	if share.ReceivedAt.IsZero() {
+		share.ReceivedAt = time.Now()
 	}
 
 	if err := sc.store.Add(share); err != nil {

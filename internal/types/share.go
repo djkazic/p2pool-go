@@ -47,6 +47,8 @@ type Share struct {
 	CoinbaseTx      []byte   `json:"coinbase_tx"`      // Full serialized coinbase transaction
 	ShareChainNonce uint64   `json:"sharechain_nonce"` // Nonce for sharechain commitment
 
+	ReceivedAt time.Time `json:"received_at"` // When the node first saw this share
+
 	// Cached/computed fields
 	hash *[32]byte
 }

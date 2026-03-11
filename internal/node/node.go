@@ -392,14 +392,12 @@ func (n *Node) handleSubmission(sub *stratum.ShareSubmission) {
 	btcTarget := util.CompactToTarget(share.Header.Bits)
 	if util.HashMeetsTarget(headerHash, btcTarget) {
 		hashHex := util.HashToHex(headerHash)
-		n.logger.Info("BITCOIN BLOCK FOUND!",
+		n.logger.Info("potential Bitcoin block, submitting...",
 			zap.String("hash", hashHex),
 			zap.String("miner", sub.WorkerName),
 			zap.Int64("height", job.Height),
 		)
-		metrics.BlocksFound.Inc()
-		n.recordBlockFound(hashHex)
-		n.submitBlock(header, coinbaseBytes, job.Template)
+		n.submitBlock(header, coinbaseBytes, job.Template, hashHex, sub.WorkerName)
 	}
 }
 
@@ -1050,7 +1048,7 @@ func (n *Node) buildTreeData() []web.TreeShare {
 			Hash:          s.HashHex(),
 			PrevShareHash: s.PrevShareHashHex(),
 			Miner:         s.MinerAddress,
-			Timestamp:     int64(s.Header.Timestamp),
+			Timestamp:     shareDisplayTime(s),
 			IsBlock:       s.IsBlock(),
 			MainChain:     true,
 		})
@@ -1066,7 +1064,7 @@ func (n *Node) buildTreeData() []web.TreeShare {
 			Hash:          s.HashHex(),
 			PrevShareHash: s.PrevShareHashHex(),
 			Miner:         s.MinerAddress,
-			Timestamp:     int64(s.Header.Timestamp),
+			Timestamp:     shareDisplayTime(s),
 			IsBlock:       s.IsBlock(),
 			MainChain:     false,
 		})
@@ -1087,7 +1085,7 @@ func (n *Node) dashboardData() *web.StatusData {
 	if tip, ok := n.chain.Tip(); ok {
 		tipHash = tip.HashHex()
 		tipMiner = tip.MinerAddress
-		tipTime = int64(tip.Header.Timestamp)
+		tipTime = shareDisplayTime(tip)
 		// Single walk for both recent shares and PPLNS window
 		pplnsAncestors = n.chain.GetAncestors(tip.Hash(), n.config.PPLNSWindowSize)
 		recentCount := 10
@@ -1098,7 +1096,7 @@ func (n *Node) dashboardData() *web.StatusData {
 			recentShares = append(recentShares, web.ShareInfo{
 				Hash:      s.HashHex(),
 				Miner:     s.MinerAddress,
-				Timestamp: int64(s.Header.Timestamp),
+				Timestamp: shareDisplayTime(s),
 				IsBlock:   s.IsBlock(),
 			})
 		}
@@ -1278,7 +1276,7 @@ func (n *Node) lookupShare(hashHex string) *web.ShareDetail {
 	return &web.ShareDetail{
 		Hash:          share.HashHex(),
 		Miner:         share.MinerAddress,
-		Timestamp:     int64(share.Header.Timestamp),
+		Timestamp:     shareDisplayTime(share),
 		IsBlock:       share.IsBlock(),
 		Version:       share.Header.Version,
 		PrevBlockHash: util.HashToHex(share.Header.PrevBlockHash),
@@ -1470,7 +1468,7 @@ func (n *Node) buildShareFromHeader(header []byte, coinbase []byte, shareTarget 
 
 // submitBlock reconstructs the full block from the header, coinbase, and
 // the job's block template transactions, then submits it to bitcoind.
-func (n *Node) submitBlock(header []byte, coinbase []byte, tmpl *bitcoin.BlockTemplate) {
+func (n *Node) submitBlock(header []byte, coinbase []byte, tmpl *bitcoin.BlockTemplate, hashHex string, miner string) {
 	// Pre-submission verification: independently compute the merkle root
 	// and compare with the header's merkle root to catch any issues early.
 	if err := work.VerifyMerkleRoot(header, coinbase, tmpl); err != nil {
@@ -1497,8 +1495,13 @@ func (n *Node) submitBlock(header []byte, coinbase []byte, tmpl *bitcoin.BlockTe
 		cancel()
 
 		if err == nil {
-			n.logger.Info("block submitted to Bitcoin network successfully")
+			n.logger.Info("BITCOIN BLOCK FOUND!",
+				zap.String("hash", hashHex),
+				zap.String("miner", miner),
+			)
+			metrics.BlocksFound.Inc()
 			metrics.BlockSubmissions.WithLabelValues("success").Inc()
+			n.recordBlockFound(hashHex)
 			return
 		}
 
@@ -1525,6 +1528,15 @@ func (n *Node) submitBlock(header []byte, coinbase []byte, tmpl *bitcoin.BlockTe
 	}
 }
 
+
+// shareDisplayTime returns the share's ReceivedAt time for display, falling
+// back to the header timestamp for shares that predate ReceivedAt tracking.
+func shareDisplayTime(s *types.Share) int64 {
+	if !s.ReceivedAt.IsZero() {
+		return s.ReceivedAt.Unix()
+	}
+	return int64(s.Header.Timestamp)
+}
 
 // applyVersionRolling computes the actual block version by merging the miner's
 // rolled version bits into the original job version using the BIP 310 mask.

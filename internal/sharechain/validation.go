@@ -11,10 +11,12 @@ import (
 
 const (
 	// MaxTimeFuture is the maximum time a share's timestamp can be ahead of our clock.
-	// Job timestamps use max(bitcoind curtime, local time), so MTP drift is eliminated.
-	// The remaining slack covers ASIC ntime rolling (typically a few seconds between
-	// job refreshes) plus minor clock skew between nodes.
-	MaxTimeFuture = 2 * time.Minute
+	// Matches Bitcoin's MAX_FUTURE_BLOCK_TIME. Share timestamps come from bitcoind's
+	// curtime (= max(MTP+1, local_time)), which can be well ahead of real time when
+	// recent blocks had future timestamps — up to ~90min drift has been observed.
+	// ASIC ntime rolling adds more on top. This does NOT affect difficulty calculation:
+	// all shares are inflated by the same amount, so relative differences are correct.
+	MaxTimeFuture = 2 * time.Hour
 
 	// MaxTimePast is the maximum time a share's timestamp can be behind the parent.
 	MaxTimePast = 10 * time.Minute

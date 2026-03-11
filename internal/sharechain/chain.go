@@ -39,7 +39,8 @@ type ShareChain struct {
 	diffCalc   *DifficultyCalculator
 	logger     *zap.Logger
 
-	windowSize int
+	windowSize    int
+	networkTarget *big.Int // current Bitcoin network target (floor for share target)
 
 	// Event subscribers
 	subscribers []chan Event
@@ -264,6 +265,24 @@ func (sc *ShareChain) GetExpectedTargetForParent(parentHash [32]byte) *big.Int {
 	return sc.getExpectedTargetForParent(parentHash)
 }
 
+// SetNetworkTarget updates the current Bitcoin network target.
+// Share targets are clamped so they never go below this (i.e., share
+// difficulty never exceeds block difficulty).
+func (sc *ShareChain) SetNetworkTarget(target *big.Int) {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	sc.networkTarget = new(big.Int).Set(target)
+}
+
+// clampToNetwork ensures the share target never drops below the Bitcoin
+// network target. A share harder than a block is counterproductive.
+func (sc *ShareChain) clampToNetwork(target *big.Int) *big.Int {
+	if sc.networkTarget != nil && target.Cmp(sc.networkTarget) < 0 {
+		return util.CompactToTarget(util.TargetToCompact(sc.networkTarget))
+	}
+	return target
+}
+
 // getExpectedTarget must be called with sc.mu held.
 func (sc *ShareChain) getExpectedTarget() *big.Int {
 	tip, ok := sc.store.Tip()
@@ -273,7 +292,7 @@ func (sc *ShareChain) getExpectedTarget() *big.Int {
 
 	tipHash := tip.Hash()
 	ancestors := sc.store.GetAncestors(tipHash, DifficultyAdjustmentWindow)
-	return sc.diffCalc.NextTarget(ancestors)
+	return sc.clampToNetwork(sc.diffCalc.NextTarget(ancestors))
 }
 
 // getExpectedTargetForParent computes the expected target for a share whose
@@ -304,7 +323,7 @@ func (sc *ShareChain) getExpectedTargetForParent(parentHash [32]byte) *big.Int {
 		}
 	}
 
-	return newTarget
+	return sc.clampToNetwork(newTarget)
 }
 
 // PruneOrphans removes shares that are not on the main chain.

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/big"
 	"sync"
+	"time"
 
 	"github.com/djkazic/p2pool-go/internal/types"
 
@@ -60,10 +61,15 @@ func NewBoltStore(path string, logger *zap.Logger) (*BoltStore, error) {
 	// Load all shares from disk into memory.
 	err = db.View(func(tx *bbolt.Tx) error {
 		b := tx.Bucket(bucketShares)
+		now := time.Now()
 		return b.ForEach(func(k, v []byte) error {
 			share, err := decodeShare(v)
 			if err != nil {
 				return fmt.Errorf("decode share %x: %w", k, err)
+			}
+			// Backfill ReceivedAt for shares that predate the field.
+			if share.ReceivedAt.IsZero() {
+				share.ReceivedAt = now
 			}
 			var hash [32]byte
 			copy(hash[:], k)

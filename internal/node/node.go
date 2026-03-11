@@ -254,6 +254,13 @@ func (n *Node) eventLoop(ctx context.Context) {
 }
 
 func (n *Node) handleNewJob(job *work.JobData) {
+	// Update the network target so share difficulty never exceeds block difficulty.
+	var btcBits uint32
+	fmt.Sscanf(job.NBits, "%x", &btcBits)
+	if btcBits != 0 {
+		n.chain.SetNetworkTarget(util.CompactToTarget(btcBits))
+	}
+
 	stratumJob := &stratum.Job{
 		ID:             job.ID,
 		PrevHash:       job.PrevBlockHash,

@@ -1,0 +1,1673 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>p2pool Dashboard</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box
+    }
+
+    body {
+      background: #050a05;
+      color: #20cc20;
+      font-family: "SF Mono", SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+      padding: 24px;
+      min-height: 100vh;
+      animation: flicker 4s infinite
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: #33ff33;
+      margin-bottom: 4px;
+      text-shadow: 0 0 8px rgba(51, 255, 51, 0.4), 0 0 20px rgba(51, 255, 51, 0.15)
+    }
+
+    .subtitle {
+      color: #1a9a1a;
+      font-size: 0.85rem;
+      margin-bottom: 24px
+    }
+
+    .subtitle span {
+      color: #33ff33
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px
+    }
+
+    .card {
+      background: #0a120a;
+      border: 1px solid #0f2a0f;
+      border-radius: 8px;
+      padding: 20px
+    }
+
+    .card .label {
+      color: #1a9a1a;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px
+    }
+
+    .card .value {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: #33ff33;
+      font-family: "SF Mono", SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+      text-shadow: 0 0 8px rgba(51, 255, 51, 0.4), 0 0 20px rgba(51, 255, 51, 0.15)
+    }
+
+    .card .value.accent {
+      color: #33ff33
+    }
+
+    .section {
+      margin-bottom: 24px
+    }
+
+    .grid2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 24px
+    }
+
+    @media(max-width:900px) {
+      .grid2 {
+        grid-template-columns: 1fr
+      }
+
+      #miners-card {
+        overflow-x: auto
+      }
+    }
+
+    .card h2 {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #33ff33;
+      margin-bottom: 12px;
+      text-shadow: 0 0 8px rgba(51, 255, 51, 0.4), 0 0 20px rgba(51, 255, 51, 0.15)
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse
+    }
+
+    th {
+      text-align: left;
+      color: #1a9a1a;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 6px 8px;
+      border-bottom: 1px solid #0f2a0f
+    }
+
+    td {
+      padding: 8px;
+      font-size: 0.8rem;
+      border-bottom: 1px solid #0a1f0a;
+      font-family: "SF Mono", SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace
+    }
+
+    td.miner {
+      word-break: break-all;
+      white-space: normal
+    }
+
+    td.miner.other a.addr {
+      color: #157a15
+    }
+
+    td.hash {
+      color: #1a9a1a;
+      cursor: pointer;
+      word-break: break-all;
+      white-space: normal;
+      width: 45%
+    }
+
+    td.hash:hover {
+      color: #55ff55;
+      text-decoration: underline
+    }
+
+    a.addr {
+      color: #33ff33;
+      text-decoration: none;
+      word-break: break-all
+    }
+
+    a.addr:hover {
+      text-decoration: underline
+    }
+
+    td.time {
+      color: #20cc20;
+      white-space: nowrap
+    }
+
+    /* Golden share (Bitcoin block found) */
+    tr.golden td {
+      background: rgba(255, 176, 0, 0.08)
+    }
+
+    tr.golden td.hash {
+      color: #ffaa00
+    }
+
+    tr.golden td.hash:hover {
+      color: #ffcc33
+    }
+
+    .golden-badge {
+      display: inline-block;
+      background: #ffaa00;
+      color: #050a05;
+      font-size: 0.6rem;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 3px;
+      margin-left: 6px;
+      vertical-align: middle;
+      letter-spacing: 0.3px;
+      text-shadow: none
+    }
+
+    .sankey-wrap {
+      position: relative;
+      width: 100%;
+      min-height: 120px
+    }
+
+    .sankey-wrap canvas {
+      width: 100%;
+      height: 100%
+    }
+
+    .sankey-tooltip {
+      position: fixed;
+      background: #0d160d;
+      border: 1px solid #0f2a0f;
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 0.75rem;
+      font-family: "SF Mono", SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+      color: #20cc20;
+      pointer-events: none;
+      z-index: 50;
+      white-space: nowrap;
+      display: none;
+      box-shadow: 0 4px 12px rgba(0, 10, 0, 0.5)
+    }
+
+    .sankey-tooltip .st-addr {
+      color: #33ff33
+    }
+
+    .sankey-tooltip .st-amt {
+      color: #33ff33;
+      font-weight: 600
+    }
+
+    .sankey-tooltip .st-pct {
+      color: #1a9a1a
+    }
+
+    .payout-table {
+      margin-top: 16px;
+      border-top: 1px solid #0a1f0a
+    }
+
+    .payout-table tbody {
+      max-height: 140px;
+      overflow-y: auto;
+      display: block
+    }
+
+    .payout-table thead,
+    .payout-table tbody tr {
+      display: table;
+      width: 100%;
+      table-layout: fixed
+    }
+
+    .payout-table th {
+      text-align: left;
+      color: #1a9a1a;
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 8px 8px 4px
+    }
+
+    .payout-table td {
+      padding: 4px 8px;
+      font-size: 0.75rem;
+      border: none;
+      font-family: "SF Mono", SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace
+    }
+
+    .payout-table th:last-child,
+    .payout-table td:last-child {
+      text-align: right
+    }
+
+    .payout-table th:nth-child(2),
+    .payout-table td:nth-child(2) {
+      text-align: right
+    }
+
+    .info {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 8px;
+      margin-top: 12px
+    }
+
+    .info-item {
+      font-size: 0.75rem;
+      color: #1a9a1a
+    }
+
+    .info-item span {
+      color: #20cc20
+    }
+
+    .no-data {
+      color: #0f5f0f;
+      font-size: 0.85rem;
+      font-style: italic;
+      padding: 16px 0
+    }
+
+    tr.no-shares td {
+      color: #0f5f0f
+    }
+
+    .dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #33ff33;
+      margin-right: 6px;
+      animation: pulse 2s infinite
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        opacity: 1
+      }
+
+      50% {
+        opacity: 0.4
+      }
+    }
+
+    /* Graphs */
+    .graph-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 24px
+    }
+
+    @media(max-width:900px) {
+      .graph-grid {
+        grid-template-columns: 1fr
+      }
+    }
+
+    .graph-card {
+      background: #0a120a;
+      border: 1px solid #0f2a0f;
+      border-radius: 8px;
+      padding: 20px
+    }
+
+    .graph-card h2 {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #33ff33;
+      margin-bottom: 12px;
+      text-shadow: 0 0 8px rgba(51, 255, 51, 0.4), 0 0 20px rgba(51, 255, 51, 0.15)
+    }
+
+    .graph-wrap {
+      position: relative;
+      width: 100%;
+      height: 180px;
+      cursor: crosshair
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%
+    }
+
+    .graph-tooltip {
+      position: fixed;
+      background: #0d160d;
+      border: 1px solid #0f2a0f;
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 0.75rem;
+      font-family: "SF Mono", SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+      color: #20cc20;
+      pointer-events: none;
+      z-index: 50;
+      white-space: nowrap;
+      display: none;
+      box-shadow: 0 4px 12px rgba(0, 10, 0, 0.5)
+    }
+
+    .graph-tooltip .tt-val {
+      color: #33ff33;
+      font-weight: 600
+    }
+
+    .graph-tooltip .tt-time {
+      color: #1a9a1a;
+      font-size: 0.65rem
+    }
+
+    .tree-wrap {
+      position: relative;
+      width: 100%;
+      height: 160px;
+      cursor: crosshair
+    }
+
+    .peer-wrap {
+      position: relative;
+      width: 100%;
+      height: 200px;
+      cursor: crosshair
+    }
+
+    /* Share detail modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 100;
+      justify-content: center;
+      align-items: center
+    }
+
+    .modal-overlay.open {
+      display: flex
+    }
+
+    .modal {
+      background: #0a120a;
+      border: 1px solid #0f2a0f;
+      border-radius: 12px;
+      padding: 24px;
+      max-width: 600px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto
+    }
+
+    .modal h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #33ff33;
+      margin-bottom: 16px;
+      text-shadow: 0 0 8px rgba(51, 255, 51, 0.4), 0 0 20px rgba(51, 255, 51, 0.15)
+    }
+
+    .modal .close-btn {
+      float: right;
+      background: none;
+      border: none;
+      color: #1a9a1a;
+      font-size: 1.2rem;
+      cursor: pointer;
+      padding: 4px 8px
+    }
+
+    .modal .close-btn:hover {
+      color: #33ff33
+    }
+
+    .modal dl {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 6px 12px
+    }
+
+    .modal dt {
+      color: #1a9a1a;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding-top: 4px
+    }
+
+    .modal dd {
+      font-family: "SF Mono", SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 0.8rem;
+      word-break: break-all;
+      padding: 4px 0
+    }
+
+    .modal dd.golden {
+      color: #ffaa00;
+      font-weight: 600;
+      text-shadow: 0 0 8px rgba(255, 170, 0, 0.4), 0 0 20px rgba(255, 170, 0, 0.15)
+    }
+
+    .modal .loading {
+      color: #0f5f0f;
+      font-style: italic;
+      padding: 20px 0;
+      text-align: center
+    }
+
+    /* CRT scanlines */
+    body::before {
+      content: "";
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 0, 0, 0.15) 2px, rgba(0, 0, 0, 0.15) 4px);
+      pointer-events: none;
+      z-index: 9999
+    }
+
+    /* CRT vignette */
+    body::after {
+      content: "";
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(ellipse at center, transparent 60%, rgba(0, 0, 0, 0.6) 100%);
+      pointer-events: none;
+      z-index: 9998
+    }
+
+    /* CRT flicker */
+    @keyframes flicker {
+      0% {
+        opacity: 1
+      }
+
+      3% {
+        opacity: 0.985
+      }
+
+      6% {
+        opacity: 1
+      }
+
+      42% {
+        opacity: 1
+      }
+
+      44% {
+        opacity: 0.975
+      }
+
+      46% {
+        opacity: 1
+      }
+
+      82% {
+        opacity: 1
+      }
+
+      84% {
+        opacity: 0.98
+      }
+
+      86% {
+        opacity: 1
+      }
+
+      100% {
+        opacity: 1
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <h1>p2pool Dashboard</h1>
+  <p class="subtitle"><span class="dot"></span>Auto-refreshing &middot; <span id="network">-</span> &middot; Uptime:
+    <span id="uptime">-</span>
+  </p>
+
+  <div class="stats">
+    <div class="card">
+      <div class="label">Pool Hashrate</div>
+      <div class="value accent" id="pool-hashrate">-</div>
+    </div>
+    <div class="card">
+      <div class="label">Local Hashrate</div>
+      <div class="value" id="local-hashrate">-</div>
+    </div>
+    <div class="card">
+      <div class="label">Miners | Peers</div>
+      <div class="value" id="miners-peers">-</div>
+    </div>
+    <div class="card">
+      <div class="label">Shares</div>
+      <div class="value" id="shares">-</div>
+    </div>
+    <div class="card">
+      <div class="label">Difficulty</div>
+      <div class="value" id="difficulty">-</div>
+    </div>
+    <div class="card">
+      <div class="label">Est. Time to Block</div>
+      <div class="value" id="ttb">-</div>
+    </div>
+    <div class="card">
+      <div class="label">Last Block Found</div>
+      <div class="value" id="last-block">-</div>
+    </div>
+  </div>
+
+  <div class="graph-grid">
+    <div class="graph-card">
+      <h2>Pool Hashrate</h2>
+      <div class="graph-wrap"><canvas id="graph-hashrate"></canvas></div>
+    </div>
+    <div class="graph-card">
+      <h2>Local Hashrate</h2>
+      <div class="graph-wrap"><canvas id="graph-local"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card section" id="miners-card">
+    <h2>Connected Miners</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Worker</th>
+          <th>Hashrate</th>
+          <th>Difficulty</th>
+          <th>Shares (10m)</th>
+          <th>Last Share</th>
+          <th>Connected</th>
+        </tr>
+      </thead>
+      <tbody id="miners-table">
+        <tr>
+          <td colspan="6" class="no-data">No miners connected</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h2>Recent Shares</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Hash</th>
+            <th>Miner</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+        <tbody id="shares-table">
+          <tr>
+            <td colspan="3" class="no-data">No shares yet</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h2>Payout Details</h2>
+      <div class="sankey-wrap" id="sankey-wrap"><canvas id="sankey-canvas"></canvas></div>
+      <div class="no-data" id="sankey-nodata">No data yet</div>
+      <table class="payout-table" id="payout-table" style="display:none">
+        <thead>
+          <tr>
+            <th>Address</th>
+            <th>Amount</th>
+            <th>%</th>
+          </tr>
+        </thead>
+        <tbody id="payout-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="graph-card" style="margin-bottom:24px">
+    <h2>Peer Network</h2>
+    <div class="peer-wrap"><canvas id="peer-canvas"></canvas></div>
+  </div>
+
+  <div class="graph-card" style="margin-bottom:24px">
+    <h2>Sharechain</h2>
+    <div class="tree-wrap"><canvas id="tree-canvas"></canvas></div>
+  </div>
+
+  <div class="card">
+    <h2>Node Info</h2>
+    <div class="info">
+      <div class="info-item">Tip: <span id="tip-hash">-</span></div>
+      <div class="info-item">Tip Miner: <span id="tip-miner">-</span></div>
+      <div class="info-item">Target: <span id="target-bits">-</span></div>
+      <div class="info-item">Stratum Port: <span id="stratum-port">-</span></div>
+      <div class="info-item">P2P Port: <span id="p2p-port">-</span></div>
+      <div class="info-item">Share Target Time: <span id="share-target-time">-</span></div>
+      <div class="info-item">PPLNS Window: <span id="pplns-window">-</span></div>
+    </div>
+  </div>
+
+  <!-- Share detail modal -->
+  <div class="modal-overlay" id="share-modal">
+    <div class="modal">
+      <button class="close-btn" onclick="closeModal()">&times;</button>
+      <h2>Share Details</h2>
+      <div id="share-detail-content">
+        <div class="loading">Loading...</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="graph-tooltip" id="graph-tooltip"></div>
+  <div class="sankey-tooltip" id="sankey-tooltip"></div>
+
+  <script>
+    /* ---- Utility functions ---- */
+    function timeAgo(ts) {
+      if (!ts) return "-";
+      var d = Math.floor(Date.now() / 1000) - ts;
+      if (d < 0) return "just now";
+      if (d < 60) return d + "s ago";
+      if (d < 3600) return Math.floor(d / 60) + "m ago";
+      if (d < 86400) return Math.floor(d / 3600) + "h ago";
+      return Math.floor(d / 86400) + "d ago";
+    }
+    function fmtUptime(s) {
+      if (!s) return "-";
+      var d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+      if (d > 0) return d + "d " + h + "h " + m + "m";
+      if (h > 0) return h + "h " + m + "m";
+      return m + "m " + Math.floor(s % 60) + "s";
+    }
+    function truncate(s, n) {
+      if (!s) return "-";
+      if (s.length <= n) return s;
+      return s.substring(0, n) + "...";
+    }
+    function esc(s) {
+      if (!s) return "";
+      return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    }
+    var _net = "", _ourAddr = "", _prevTip = "";
+    var _shareSound = new Audio("/assets/share_found.mp3");
+    _shareSound.preload = "auto";
+    var _audioUnlocked = false;
+    function _unlockAudio() {
+      if (_audioUnlocked) return;
+      var v = _shareSound.volume;
+      _shareSound.volume = 0;
+      _shareSound.play().then(function () {_shareSound.pause(); _shareSound.currentTime = 0; _shareSound.volume = v; _audioUnlocked = true;}).catch(function () { });
+    }
+    document.addEventListener("click", _unlockAudio, {once: true});
+    document.addEventListener("keydown", _unlockAudio, {once: true});
+    function addrLink(addr) {
+      if (!addr) return "-";
+      var prefix = (_net === "mainnet" || !_net) ? "" : "/" + _net.replace("testnet3", "testnet");
+      var url = "https://mempool.space" + prefix + "/address/" + encodeURIComponent(addr);
+      return '<a class="addr" href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(addr) + '</a>';
+    }
+    function fmtDiff(d) {
+      if (d >= 1e12) return (d / 1e12).toFixed(2) + "T";
+      if (d >= 1e9) return (d / 1e9).toFixed(2) + "G";
+      if (d >= 1e6) return (d / 1e6).toFixed(2) + "M";
+      if (d >= 1e3) return (d / 1e3).toFixed(2) + "K";
+      return d.toFixed(2);
+    }
+    function fmtHash(h) {
+      if (!h || h === 0) return "0 H/s";
+      if (h >= 1e18) return (h / 1e18).toFixed(2) + " EH/s";
+      if (h >= 1e15) return (h / 1e15).toFixed(2) + " PH/s";
+      if (h >= 1e12) return (h / 1e12).toFixed(2) + " TH/s";
+      if (h >= 1e9) return (h / 1e9).toFixed(2) + " GH/s";
+      if (h >= 1e6) return (h / 1e6).toFixed(2) + " MH/s";
+      if (h >= 1e3) return (h / 1e3).toFixed(2) + " KH/s";
+      return h.toFixed(2) + " H/s";
+    }
+    function fmtDuration(s) {
+      if (!s || s <= 0) return "-";
+      var d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+      if (d > 36500) return "\u221e";
+      if (d > 365) return (d / 365).toFixed(1) + "y";
+      if (d > 0) return d + "d " + h + "h";
+      if (h > 0) return h + "h " + m + "m";
+      return m + "m";
+    }
+    function fmtTimestamp(ts) {
+      if (!ts) return "-";
+      return new Date(ts * 1000).toLocaleString();
+    }
+    function fmtBtc(sats) {
+      if (!sats) return "0 BTC";
+      return (sats / 1e8).toFixed(8) + " BTC";
+    }
+
+    /* ---- Graph history (ring buffers, stores {t:timestamp, v:value}) ---- */
+    var MAX_POINTS = 60;
+    var histHashrate = [];
+    var histLocal = [];
+    var histSeeded = false;
+    function pushHistory(arr, t, v) {arr.push({t: t, v: v}); if (arr.length > MAX_POINTS) arr.shift();}
+
+    /* ---- Canvas graph renderer with hover support ---- */
+    var graphState = {};
+
+    function initGraph(canvasId, color, formatter) {
+      var canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      var wrap = canvas.parentElement;
+      graphState[canvasId] = {color: color, formatter: formatter, hoverIdx: -1};
+
+      wrap.addEventListener("mousemove", function (e) {
+        var st = graphState[canvasId];
+        var data = canvasId === "graph-hashrate" ? histHashrate : histLocal;
+        if (data.length < 2) return;
+        var rect = wrap.getBoundingClientRect();
+        var mx = e.clientX - rect.left;
+        var W = rect.width;
+        var max = 0;
+        for (var i = 0; i < data.length; i++) {if (data[i].v > max) max = data[i].v;}
+        if (max === 0) max = 1;
+        max *= 1.1;
+        var ctx = canvas.getContext("2d");
+        ctx.font = "10px monospace";
+        var maxLW = 0;
+        for (var g = 0; g <= 4; g++) {var lw = ctx.measureText(st.formatter(max * g / 4)).width; if (lw > maxLW) maxLW = lw;}
+        var padLeft = Math.max(maxLW + 14, 40), padRight = 12;
+        var gW = W - padLeft - padRight;
+        var idx = Math.round((mx - padLeft) / gW * (data.length - 1));
+        idx = Math.max(0, Math.min(data.length - 1, idx));
+        st.hoverIdx = idx;
+        drawGraph(canvasId);
+        var tooltip = document.getElementById("graph-tooltip");
+        var pt = data[idx];
+        var timeStr = pt.t ? new Date(pt.t * 1000).toLocaleTimeString() : "";
+        tooltip.innerHTML = '<span class="tt-val">' + esc(st.formatter(pt.v)) + '</span><br><span class="tt-time">' + esc(timeStr) + '</span>';
+        tooltip.style.display = "block";
+        var tx = e.clientX + 14, ty = e.clientY - 40;
+        if (tx + 150 > window.innerWidth) tx = e.clientX - 164;
+        if (ty < 0) ty = e.clientY + 14;
+        tooltip.style.left = tx + "px";
+        tooltip.style.top = ty + "px";
+      });
+
+      wrap.addEventListener("mouseleave", function () {
+        graphState[canvasId].hoverIdx = -1;
+        drawGraph(canvasId);
+        document.getElementById("graph-tooltip").style.display = "none";
+      });
+    }
+
+    function drawGraph(canvasId) {
+      var st = graphState[canvasId];
+      if (!st) return;
+      var data = canvasId === "graph-hashrate" ? histHashrate : histLocal;
+      var color = st.color, formatter = st.formatter, hoverIdx = st.hoverIdx;
+      var canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      var ctx = canvas.getContext("2d");
+      var dpr = window.devicePixelRatio || 1;
+      var rect = canvas.parentElement.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.scale(dpr, dpr);
+      var W = rect.width, H = rect.height;
+      ctx.clearRect(0, 0, W, H);
+      if (data.length < 2) return;
+
+      var max = 0;
+      for (var i = 0; i < data.length; i++) {if (data[i].v > max) max = data[i].v;}
+      if (max === 0) max = 1;
+      max *= 1.1;
+
+      // Dynamic left padding based on widest Y-axis label
+      ctx.font = "10px monospace";
+      var maxLW = 0;
+      for (var g = 0; g <= 4; g++) {var lw = ctx.measureText(formatter(max * g / 4)).width; if (lw > maxLW) maxLW = lw;}
+      var padLeft = Math.max(maxLW + 14, 40), padRight = 12, padTop = 22, padBottom = 22;
+      var gW = W - padLeft - padRight, gH = H - padTop - padBottom;
+
+      // Grid lines + Y-axis labels
+      ctx.strokeStyle = "#0a1f0a"; ctx.lineWidth = 1;
+      ctx.fillStyle = "#0f5f0f"; ctx.textAlign = "right"; ctx.textBaseline = "middle";
+      for (var g = 0; g <= 4; g++) {
+        var gy = padTop + gH * (1 - g / 4);
+        ctx.beginPath(); ctx.moveTo(padLeft, gy); ctx.lineTo(W - padRight, gy); ctx.stroke();
+        ctx.fillText(formatter(max * g / 4), padLeft - 6, gy);
+      }
+
+      // X-axis time labels
+      ctx.fillStyle = "#0f5f0f"; ctx.textAlign = "center"; ctx.textBaseline = "top";
+      var numLabels = Math.min(5, data.length);
+      if (numLabels >= 2) {
+        for (var i = 0; i < numLabels; i++) {
+          var di = Math.round(i * (data.length - 1) / (numLabels - 1));
+          var x = padLeft + (di / (data.length - 1)) * gW;
+          var t = data[di].t;
+          if (t) {
+            var d = new Date(t * 1000);
+            ctx.fillText(d.getHours().toString().padStart(2, "0") + ":" + d.getMinutes().toString().padStart(2, "0"), x, padTop + gH + 5);
+          }
+        }
+      }
+
+      function getX(i) {return padLeft + (i / (data.length - 1)) * gW;}
+      function getY(v) {return padTop + gH * (1 - v / max);}
+
+      // Data line
+      ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineJoin = "round";
+      ctx.beginPath();
+      for (var i = 0; i < data.length; i++) {
+        var x = getX(i), y = getY(data[i].v);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+
+      // Fill under line
+      ctx.lineTo(getX(data.length - 1), padTop + gH);
+      ctx.lineTo(padLeft, padTop + gH);
+      ctx.closePath();
+      ctx.fillStyle = color.replace("1)", "0.08)");
+      ctx.fill();
+
+      // Current value (top right, above graph area)
+      ctx.fillStyle = color; ctx.font = "bold 11px monospace";
+      ctx.textAlign = "right"; ctx.textBaseline = "top";
+      ctx.fillText(formatter(data[data.length - 1].v), W - padRight, 4);
+
+      // Hover crosshair + dot
+      if (hoverIdx >= 0 && hoverIdx < data.length) {
+        var hx = getX(hoverIdx), hy = getY(data[hoverIdx].v);
+        ctx.strokeStyle = "#0f5f0f"; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+        ctx.beginPath(); ctx.moveTo(hx, padTop); ctx.lineTo(hx, padTop + gH); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.beginPath(); ctx.arc(hx, hy, 4, 0, Math.PI * 2);
+        ctx.fillStyle = color; ctx.fill();
+        ctx.strokeStyle = "#050a05"; ctx.lineWidth = 2; ctx.stroke();
+      }
+    }
+
+    /* ---- Sankey diagram for payout details ---- */
+    var sankeyPayouts = [];
+    var sankeyHoverIdx = -1;
+
+    function drawSankey() {
+      var canvas = document.getElementById("sankey-canvas");
+      var wrap = document.getElementById("sankey-wrap");
+      var nodata = document.getElementById("sankey-nodata");
+      if (!canvas || !wrap) return;
+      var entries = sankeyPayouts;
+      if (!entries || entries.length === 0) {
+        canvas.style.display = "none";
+        nodata.style.display = "";
+        return;
+      }
+      canvas.style.display = "";
+      nodata.style.display = "none";
+
+      // Size canvas: row height based on entry count
+      var rowH = Math.max(28, Math.min(40, 200 / entries.length));
+      var gap = 4;
+      var totalH = entries.length * rowH + (entries.length - 1) * gap;
+      var minH = Math.max(totalH + 24, 120);
+      wrap.style.height = minH + "px";
+
+      var ctx = canvas.getContext("2d");
+      var dpr = window.devicePixelRatio || 1;
+      var rect = wrap.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.scale(dpr, dpr);
+      var W = rect.width, H = rect.height;
+      ctx.clearRect(0, 0, W, H);
+
+      // Layout: left node (block reward) -> flows -> right nodes (addresses)
+      var nodeW = 12;
+      ctx.font = "10px monospace";
+      var leftLblW = Math.max(ctx.measureText("Block").width, ctx.measureText("Reward").width);
+      var leftX = Math.ceil(leftLblW / 2 - nodeW / 2) + 2;
+      var rightX = W - nodeW;
+      var flowLeft = leftX + nodeW, flowRight = rightX;
+      var addrLabelPad = 8;
+
+      // Measure address label widths to set right node position
+      ctx.font = "11px monospace";
+      var maxLabelW = 0;
+      for (var i = 0; i < entries.length; i++) {
+        var lbl = entries[i].address.length > 24 ? entries[i].address.substring(0, 12) + "..." + entries[i].address.slice(-8) : entries[i].address;
+        entries[i]._label = lbl;
+        var lw = ctx.measureText(lbl).width;
+        // Also measure amount
+        var amtStr = fmtBtc(entries[i].amount);
+        entries[i]._amtStr = amtStr;
+        var aw = ctx.measureText(amtStr).width;
+        var tw = Math.max(lw, aw);
+        if (tw > maxLabelW) maxLabelW = tw;
+      }
+      rightX = W - nodeW - maxLabelW - addrLabelPad - 6;
+      if (rightX < W * 0.45) rightX = W * 0.45;
+      flowRight = rightX;
+
+      // Left node: full height block spanning all flows (need room for label above)
+      var topPad = (H - totalH) / 2;
+      if (topPad < 28) topPad = 28;
+
+      // Compute flow positions on left and right
+      var total = 0;
+      for (var i = 0; i < entries.length; i++)total += entries[i].amount;
+      if (total === 0) return;
+
+      // Left node positions (stacked proportionally)
+      var leftFlows = [];
+      var ly = topPad;
+      for (var i = 0; i < entries.length; i++) {
+        var fh = (entries[i].amount / total) * totalH;
+        if (fh < 2) fh = 2;
+        leftFlows.push({y: ly, h: fh});
+        ly += fh;
+      }
+
+      // Right node positions (equal row height, centered)
+      var rightFlows = [];
+      var ry = topPad;
+      for (var i = 0; i < entries.length; i++) {
+        rightFlows.push({y: ry, h: rowH});
+        ry += rowH + gap;
+      }
+
+      // Color palette
+      var colors = ["#33ff33", "#20cc20", "#55ff55", "#1a9a1a", "#ffaa00", "#0f7f0f", "#44dd44", "#2eb82e"];
+
+      // Draw flows (bezier curves)
+      for (var i = 0; i < entries.length; i++) {
+        var lf = leftFlows[i], rf = rightFlows[i];
+        var c = colors[i % colors.length];
+        var alpha = (sankeyHoverIdx === -1 || sankeyHoverIdx === i) ? 0.35 : 0.1;
+        ctx.fillStyle = c.replace(")", "," + alpha + ")");
+        // Convert hex to rgba
+        var r = parseInt(c.slice(1, 3), 16), g = parseInt(c.slice(3, 5), 16), b = parseInt(c.slice(5, 7), 16);
+        ctx.fillStyle = "rgba(" + r + "," + g + "," + b + "," + alpha + ")";
+        ctx.beginPath();
+        var cpx = (flowLeft + flowRight) / 2;
+        ctx.moveTo(flowLeft, lf.y);
+        ctx.bezierCurveTo(cpx, lf.y, cpx, rf.y, flowRight, rf.y);
+        ctx.lineTo(flowRight, rf.y + rf.h);
+        ctx.bezierCurveTo(cpx, rf.y + rf.h, cpx, lf.y + lf.h, flowLeft, lf.y + lf.h);
+        ctx.closePath();
+        ctx.fill();
+
+        // Stroke on hover
+        if (sankeyHoverIdx === i) {
+          ctx.strokeStyle = "rgba(" + r + "," + g + "," + b + ",0.8)";
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
+      }
+
+      // Draw left node (block reward bar)
+      ctx.fillStyle = "#1a9a1a";
+      ctx.fillRect(leftX, topPad, nodeW, totalH);
+
+      // Draw right nodes
+      for (var i = 0; i < entries.length; i++) {
+        var rf = rightFlows[i];
+        var c = colors[i % colors.length];
+        ctx.fillStyle = c;
+        ctx.fillRect(rightX, rf.y, nodeW, rf.h);
+      }
+
+      // Left label: "Block Reward" rotated or above
+      ctx.fillStyle = "#1a9a1a";
+      ctx.font = "10px monospace";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "bottom";
+      ctx.fillText("Block", leftX + nodeW / 2, topPad - 10);
+      ctx.fillText("Reward", leftX + nodeW / 2, topPad - 1);
+
+      // Right labels: address + amount
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      for (var i = 0; i < entries.length; i++) {
+        var rf = rightFlows[i];
+        var c = colors[i % colors.length];
+        var dimmed = (sankeyHoverIdx !== -1 && sankeyHoverIdx !== i);
+        ctx.font = "11px monospace";
+        ctx.fillStyle = dimmed ? "#0a3a0a" : c;
+        ctx.fillText(entries[i]._label, rightX + nodeW + addrLabelPad, rf.y + rf.h / 2 - 7);
+        ctx.font = "10px monospace";
+        ctx.fillStyle = dimmed ? "#0a3a0a" : "#1a9a1a";
+        ctx.fillText(entries[i]._amtStr, rightX + nodeW + addrLabelPad, rf.y + rf.h / 2 + 7);
+      }
+
+      // Store layout for hit testing
+      drawSankey._rightFlows = rightFlows;
+      drawSankey._leftFlows = leftFlows;
+      drawSankey._topPad = topPad;
+      drawSankey._totalH = totalH;
+      drawSankey._leftX = leftX;
+      drawSankey._nodeW = nodeW;
+      drawSankey._total = total;
+    }
+
+    (function () {
+      var wrap = document.getElementById("sankey-wrap");
+      if (!wrap) return;
+      wrap.style.cursor = "default";
+      wrap.addEventListener("mousemove", function (e) {
+        if (!sankeyPayouts || sankeyPayouts.length === 0) return;
+        var rect = wrap.getBoundingClientRect();
+        var mx = e.clientX - rect.left;
+        var my = e.clientY - rect.top;
+        var rf = drawSankey._rightFlows;
+        var lf = drawSankey._leftFlows;
+        if (!rf) return;
+        // Check if hovering over the left "Block Reward" node
+        var onLeftNode = false;
+        var lnX = drawSankey._leftX, lnW = drawSankey._nodeW, tp = drawSankey._topPad, tH = drawSankey._totalH;
+        if (lnX != null && mx >= lnX && mx <= lnX + lnW && my >= tp && my <= tp + tH) {onLeftNode = true;}
+        var idx = -1;
+        if (!onLeftNode) {
+          // Hit test right-side rows (generous hit area)
+          for (var i = 0; i < rf.length; i++) {
+            if (my >= rf[i].y && my <= rf[i].y + rf[i].h) {idx = i; break;}
+          }
+          // Also hit test left-side flows
+          if (idx === -1 && lf) {
+            for (var i = 0; i < lf.length; i++) {
+              if (my >= lf[i].y && my <= lf[i].y + lf[i].h) {idx = i; break;}
+            }
+          }
+        }
+        if (idx !== sankeyHoverIdx) {
+          sankeyHoverIdx = idx;
+          drawSankey();
+        }
+        var tooltip = document.getElementById("sankey-tooltip");
+        if (onLeftNode) {
+          var totalAmt = drawSankey._total || 0;
+          tooltip.innerHTML = '<span class="st-addr">Block Reward</span><br><span class="st-amt">' + esc(fmtBtc(totalAmt)) + '</span> <span class="st-pct">(' + sankeyPayouts.length + ' outputs)</span>';
+          tooltip.style.display = "block";
+          var tx = e.clientX + 14, ty = e.clientY - 40;
+          if (tx + 200 > window.innerWidth) tx = e.clientX - 214;
+          if (ty < 0) ty = e.clientY + 14;
+          tooltip.style.left = tx + "px";
+          tooltip.style.top = ty + "px";
+          wrap.style.cursor = "pointer";
+        } else if (idx >= 0) {
+          var p = sankeyPayouts[idx];
+          tooltip.innerHTML = '<span class="st-addr">' + esc(p.address) + '</span><br><span class="st-amt">' + esc(fmtBtc(p.amount)) + '</span> <span class="st-pct">(' + p.pct.toFixed(1) + '%)</span>';
+          tooltip.style.display = "block";
+          var tx = e.clientX + 14, ty = e.clientY - 40;
+          if (tx + 200 > window.innerWidth) tx = e.clientX - 214;
+          if (ty < 0) ty = e.clientY + 14;
+          tooltip.style.left = tx + "px";
+          tooltip.style.top = ty + "px";
+          wrap.style.cursor = "pointer";
+        } else {
+          tooltip.style.display = "none";
+          wrap.style.cursor = "default";
+        }
+      });
+      wrap.addEventListener("mouseleave", function () {
+        if (sankeyHoverIdx !== -1) {
+          sankeyHoverIdx = -1;
+          drawSankey();
+        }
+        document.getElementById("sankey-tooltip").style.display = "none";
+        wrap.style.cursor = "default";
+      });
+    })();
+
+    /* ---- Share detail modal ---- */
+    function openShareDetail(hash) {
+      var overlay = document.getElementById("share-modal");
+      var content = document.getElementById("share-detail-content");
+      content.innerHTML = '<div class="loading">Loading...</div>';
+      overlay.classList.add("open");
+      fetch("/api/share/" + encodeURIComponent(hash))
+        .then(function (r) {return r.json()})
+        .then(function (d) {
+          if (d.error) {content.innerHTML = '<div class="no-data">' + esc(d.error) + '</div>'; return;}
+          var blockBadge = d.is_block ? '<span class="golden-badge">BLOCK</span>' : "";
+          var cls = d.is_block ? ' class="golden"' : "";
+          content.innerHTML = '<dl>' +
+            '<dt>Hash</dt><dd' + cls + '>' + esc(d.hash) + blockBadge + '</dd>' +
+            '<dt>Miner</dt><dd>' + addrLink(d.miner) + '</dd>' +
+            '<dt>Time</dt><dd>' + fmtTimestamp(d.timestamp) + '</dd>' +
+            '<dt>Version</dt><dd>0x' + d.version.toString(16).padStart(8, "0") + '</dd>' +
+            '<dt>Prev Block Hash</dt><dd>' + esc(d.prev_block_hash) + '</dd>' +
+            '<dt>Merkle Root</dt><dd>' + esc(d.merkle_root) + '</dd>' +
+            '<dt>Bits</dt><dd>0x' + d.bits.toString(16).padStart(8, "0") + '</dd>' +
+            '<dt>Nonce</dt><dd>' + d.nonce + '</dd>' +
+            '<dt>Prev Share Hash</dt><dd>' + esc(d.prev_share_hash) + '</dd>' +
+            '<dt>Share Version</dt><dd>' + d.share_version + '</dd>' +
+            '<dt>Difficulty</dt><dd>' + esc(d.difficulty) + '</dd>' +
+            '</dl>';
+        })
+        .catch(function () {content.innerHTML = '<div class="no-data">Failed to load share details</div>';});
+    }
+    function closeModal() {
+      document.getElementById("share-modal").classList.remove("open");
+    }
+    document.getElementById("share-modal").addEventListener("click", function (e) {
+      if (e.target === this) closeModal();
+    });
+
+    /* ---- Sharechain tree visualization ---- */
+    var treeShares = [];
+    var treeHoverIdx = -1;
+    var treeNodes = []; // laid out nodes with x,y for hit testing
+
+    function layoutTree(shares) {
+      if (!shares || shares.length === 0) return [];
+      // Separate main chain (already oldest-first from backend) and forks
+      var main = [], forks = [];
+      for (var i = 0; i < shares.length; i++) {
+        if (shares[i].main_chain) main.push(shares[i]);
+        else forks.push(shares[i]);
+      }
+      // Assign columns to main chain nodes
+      var nodes = [];
+      var hashToNode = {};
+      for (var i = 0; i < main.length; i++) {
+        var n = {share: main[i], col: i, lane: 0, main: true};
+        nodes.push(n);
+        hashToNode[main[i].hash] = n;
+      }
+      // Group fork nodes into branches by walking prev_share_hash links
+      // Find fork point (the main-chain parent) for each fork node
+      var forkByHash = {};
+      for (var i = 0; i < forks.length; i++)forkByHash[forks[i].hash] = forks[i];
+
+      // Build branches: connected components off main chain
+      var branches = [];
+      var assigned = {};
+      for (var i = 0; i < forks.length; i++) {
+        if (assigned[forks[i].hash]) continue;
+        // Walk back to find fork point on main chain
+        var chain = [forks[i]];
+        assigned[forks[i].hash] = true;
+        var cur = forks[i];
+        while (cur.prev_share_hash && forkByHash[cur.prev_share_hash] && !assigned[cur.prev_share_hash]) {
+          cur = forkByHash[cur.prev_share_hash];
+          chain.unshift(cur);
+          assigned[cur.hash] = true;
+        }
+        // cur.prev_share_hash should be on main chain (or unknown)
+        var forkPoint = hashToNode[cur.prev_share_hash] || null;
+        // Also collect children extending forward from this branch
+        var extended = true;
+        while (extended) {
+          extended = false;
+          for (var j = 0; j < forks.length; j++) {
+            if (!assigned[forks[j].hash] && forkByHash[chain[chain.length - 1]]) {
+              // Check if this fork's parent is the last in our chain
+              if (forks[j].prev_share_hash === chain[chain.length - 1].hash) {
+                chain.push(forks[j]);
+                assigned[forks[j].hash] = true;
+                extended = true;
+              }
+            }
+          }
+        }
+        branches.push({shares: chain, forkPoint: forkPoint});
+      }
+      // Assign lanes: alternating above/below (+1, -1, +2, -2, ...)
+      var laneIdx = 0;
+      var laneSeq = [1, -1, 2, -2, 3, -3, 4, -4];
+      for (var b = 0; b < branches.length; b++) {
+        var lane = laneSeq[laneIdx % laneSeq.length];
+        laneIdx++;
+        var br = branches[b];
+        var startCol = br.forkPoint ? br.forkPoint.col + 1 : 0;
+        for (var j = 0; j < br.shares.length; j++) {
+          var n = {share: br.shares[j], col: startCol + j, lane: lane, main: false, forkPoint: br.forkPoint};
+          nodes.push(n);
+          hashToNode[br.shares[j].hash] = n;
+        }
+      }
+      // Store hashToNode on each node for line drawing
+      for (var i = 0; i < nodes.length; i++)nodes[i]._hashToNode = hashToNode;
+      return nodes;
+    }
+
+    function drawTree() {
+      var canvas = document.getElementById("tree-canvas");
+      if (!canvas) return;
+      var wrap = canvas.parentElement;
+      var ctx = canvas.getContext("2d");
+      var dpr = window.devicePixelRatio || 1;
+      var rect = wrap.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.scale(dpr, dpr);
+      var W = rect.width, H = rect.height;
+      ctx.clearRect(0, 0, W, H);
+
+      treeNodes = layoutTree(treeShares);
+      if (treeNodes.length === 0) return;
+
+      // Find max column for scaling
+      var maxCol = 0, minLane = 0, maxLane = 0;
+      for (var i = 0; i < treeNodes.length; i++) {
+        if (treeNodes[i].col > maxCol) maxCol = treeNodes[i].col;
+        if (treeNodes[i].lane < minLane) minLane = treeNodes[i].lane;
+        if (treeNodes[i].lane > maxLane) maxLane = treeNodes[i].lane;
+      }
+      var padX = 30, padY = 30;
+      var gW = W - 2 * padX, gH = H - 2 * padY;
+      var laneRange = Math.max(maxLane - minLane, 1);
+      var centerY = H / 2;
+      var laneSpacing = Math.min(gH / laneRange, 30);
+
+      function getX(col) {return maxCol > 0 ? padX + col / maxCol * gW : W / 2;}
+      function getY(lane) {return centerY + lane * laneSpacing;}
+
+      var colors = ["#33ff33", "#20cc20", "#55ff55", "#1a9a1a", "#ffaa00", "#0f7f0f", "#44dd44", "#2eb82e"];
+      function minerColor(miner) {
+        if (!miner) return colors[0];
+        var h = 0;
+        for (var i = 0; i < miner.length; i++)h = ((h << 5) - h + miner.charCodeAt(i)) | 0;
+        return colors[((h % colors.length) + colors.length) % colors.length];
+      }
+
+      // Build hashToNode map for this draw
+      var hashToNode = {};
+      for (var i = 0; i < treeNodes.length; i++)hashToNode[treeNodes[i].share.hash] = treeNodes[i];
+
+      // Draw lines first (parent -> child)
+      for (var i = 0; i < treeNodes.length; i++) {
+        var n = treeNodes[i];
+        var nx = getX(n.col), ny = getY(n.lane);
+        // Find parent node
+        var parent = hashToNode[n.share.prev_share_hash];
+        if (!parent) continue;
+        var px = getX(parent.col), py = getY(parent.lane);
+        ctx.beginPath();
+        if (n.main) {
+          ctx.strokeStyle = "#33ff33";
+          ctx.lineWidth = 2;
+          ctx.setLineDash([]);
+        } else {
+          ctx.strokeStyle = "#1a6a1a";
+          ctx.lineWidth = 1;
+          ctx.setLineDash([4, 3]);
+        }
+        ctx.moveTo(px, py);
+        ctx.lineTo(nx, ny);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // Draw nodes
+      // Find tip (last main chain node)
+      var tipHash = "";
+      for (var i = treeNodes.length - 1; i >= 0; i--) {
+        if (treeNodes[i].main) {tipHash = treeNodes[i].share.hash; break;}
+      }
+      for (var i = 0; i < treeNodes.length; i++) {
+        var n = treeNodes[i];
+        var nx = getX(n.col), ny = getY(n.lane);
+        var r = 6;
+        var isOurs = _ourAddr && n.share.miner === _ourAddr;
+        var fillColor = isOurs ? minerColor(n.share.miner) : "#0f3f0f";
+        if (n.share.is_block) {fillColor = isOurs ? "#ffaa00" : "#6b4800"; r = 8;}
+        // Hover highlight
+        if (treeHoverIdx === i) {r += 2;}
+        ctx.beginPath();
+        ctx.arc(nx, ny, r, 0, Math.PI * 2);
+        ctx.fillStyle = fillColor;
+        ctx.fill();
+        // Tip glow ring
+        if (n.share.hash === tipHash) {
+          ctx.strokeStyle = "#33ff33";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        } else if (!n.main) {
+          ctx.strokeStyle = "#0a120a";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+        // Store pixel position for hit testing
+        treeNodes[i]._x = nx;
+        treeNodes[i]._y = ny;
+        treeNodes[i]._r = r;
+      }
+    }
+
+    (function () {
+      var wrap = document.querySelector(".tree-wrap");
+      if (!wrap) return;
+      wrap.addEventListener("mousemove", function (e) {
+        if (treeNodes.length === 0) return;
+        var rect = wrap.getBoundingClientRect();
+        var mx = e.clientX - rect.left, my = e.clientY - rect.top;
+        var hitIdx = -1;
+        for (var i = 0; i < treeNodes.length; i++) {
+          var dx = mx - treeNodes[i]._x, dy = my - treeNodes[i]._y;
+          if (dx * dx + dy * dy <= (treeNodes[i]._r + 4) * (treeNodes[i]._r + 4)) {hitIdx = i; break;}
+        }
+        if (hitIdx !== treeHoverIdx) {
+          treeHoverIdx = hitIdx;
+          drawTree();
+        }
+        var tooltip = document.getElementById("graph-tooltip");
+        if (hitIdx >= 0) {
+          var n = treeNodes[hitIdx];
+          var hashShort = n.share.hash.substring(0, 12) + "...";
+          var minerShort = n.share.miner.length > 20 ? n.share.miner.substring(0, 10) + "..." + n.share.miner.slice(-6) : n.share.miner;
+          var label = n.main ? "main" : "fork";
+          if (n.share.is_block) label = "BLOCK";
+          tooltip.innerHTML = '<span class="tt-val">' + esc(hashShort) + '</span><br><span class="tt-time">' + esc(minerShort) + ' &middot; ' + label + ' &middot; ' + timeAgo(n.share.timestamp) + '</span>';
+          tooltip.style.display = "block";
+          var tx = e.clientX + 14, ty = e.clientY - 40;
+          if (tx + 200 > window.innerWidth) tx = e.clientX - 214;
+          if (ty < 0) ty = e.clientY + 14;
+          tooltip.style.left = tx + "px";
+          tooltip.style.top = ty + "px";
+          wrap.style.cursor = "pointer";
+        } else {
+          tooltip.style.display = "none";
+          wrap.style.cursor = "crosshair";
+        }
+      });
+      wrap.addEventListener("mouseleave", function () {
+        if (treeHoverIdx !== -1) {
+          treeHoverIdx = -1;
+          drawTree();
+        }
+        document.getElementById("graph-tooltip").style.display = "none";
+        wrap.style.cursor = "crosshair";
+      });
+      wrap.addEventListener("click", function (e) {
+        if (treeHoverIdx >= 0 && treeHoverIdx < treeNodes.length) {
+          openShareDetail(treeNodes[treeHoverIdx].share.hash);
+        }
+      });
+    })();
+
+    /* ---- Peer network radial graph ---- */
+    var peerData = [];
+    var ourPeerID = "";
+    var peerHoverIdx = -1;
+    var peerNodes = []; // laid out {x,y,r,peer} for hit testing
+
+    function drawPeers() {
+      var canvas = document.getElementById("peer-canvas");
+      if (!canvas) return;
+      var wrap = canvas.parentElement;
+      var ctx = canvas.getContext("2d");
+      var dpr = window.devicePixelRatio || 1;
+      var rect = wrap.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.scale(dpr, dpr);
+      var W = rect.width, H = rect.height;
+      ctx.clearRect(0, 0, W, H);
+
+      var cx = W / 2, cy = H / 2;
+      peerNodes = [];
+
+      // Draw "You" node at center
+      var ourR = 10;
+      ctx.beginPath();
+      ctx.arc(cx, cy, ourR, 0, Math.PI * 2);
+      ctx.fillStyle = "#33ff33";
+      ctx.fill();
+      ctx.font = "bold 10px monospace";
+      ctx.fillStyle = "#33ff33";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText("You", cx, cy + ourR + 4);
+
+      if (!peerData || peerData.length === 0) return;
+
+      var n = peerData.length;
+      var radius = Math.min(W, H) * 0.38;
+      var peerR = 6;
+
+      for (var i = 0; i < n; i++) {
+        var angle = (2 * Math.PI * i / n) - Math.PI / 2;
+        var px = cx + radius * Math.cos(angle);
+        var py = cy + radius * Math.sin(angle);
+        var p = peerData[i];
+        var lat = p.latency_us || 0;
+
+        // Color by latency (microseconds)
+        var color;
+        if (lat <= 0) {color = "#555555";}
+        else if (lat < 100000) {color = "#33ff33";}
+        else if (lat <= 500000) {color = "#ffaa00";}
+        else {color = "#cc3333";}
+
+        // Draw line from center to peer
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(px, py);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = (peerHoverIdx === i) ? 2 : 1;
+        ctx.globalAlpha = (peerHoverIdx === -1 || peerHoverIdx === i) ? 0.7 : 0.25;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+
+        // Draw peer node
+        var r = (peerHoverIdx === i) ? peerR + 2 : peerR;
+        ctx.beginPath();
+        ctx.arc(px, py, r, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.globalAlpha = (peerHoverIdx === -1 || peerHoverIdx === i) ? 1 : 0.4;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+
+        peerNodes.push({x: px, y: py, r: r, peer: p});
+      }
+    }
+
+    (function () {
+      var wrap = document.querySelector(".peer-wrap");
+      if (!wrap) return;
+      wrap.addEventListener("mousemove", function (e) {
+        if (peerNodes.length === 0) return;
+        var rect = wrap.getBoundingClientRect();
+        var mx = e.clientX - rect.left, my = e.clientY - rect.top;
+        var hitIdx = -1;
+        for (var i = 0; i < peerNodes.length; i++) {
+          var dx = mx - peerNodes[i].x, dy = my - peerNodes[i].y;
+          if (dx * dx + dy * dy <= (peerNodes[i].r + 4) * (peerNodes[i].r + 4)) {hitIdx = i; break;}
+        }
+        if (hitIdx !== peerHoverIdx) {
+          peerHoverIdx = hitIdx;
+          drawPeers();
+        }
+        var tooltip = document.getElementById("graph-tooltip");
+        if (hitIdx >= 0) {
+          var p = peerNodes[hitIdx].peer;
+          var latStr = p.latency_us > 0 ? (p.latency_us < 1000 ? p.latency_us + "\u00b5s" : (p.latency_us / 1000).toFixed(1) + "ms") : "unknown";
+          tooltip.innerHTML = '<span class="tt-val">' + esc(p.id) + '</span><br><span class="tt-label">Latency:</span> ' + latStr;
+          tooltip.style.display = "block";
+          var tx = e.clientX + 14, ty = e.clientY - 40;
+          if (tx + 200 > window.innerWidth) tx = e.clientX - 214;
+          if (ty < 0) ty = e.clientY + 14;
+          tooltip.style.left = tx + "px";
+          tooltip.style.top = ty + "px";
+          wrap.style.cursor = "pointer";
+        } else {
+          tooltip.style.display = "none";
+          wrap.style.cursor = "crosshair";
+        }
+      });
+      wrap.addEventListener("mouseleave", function () {
+        if (peerHoverIdx !== -1) {
+          peerHoverIdx = -1;
+          drawPeers();
+        }
+        document.getElementById("graph-tooltip").style.display = "none";
+        wrap.style.cursor = "crosshair";
+      });
+    })();
+
+    /* ---- Main update ---- */
+    function update(data) {
+      _net = data.network || "";
+      _ourAddr = data.our_address || "";
+      if (_prevTip && data.tip_hash && data.tip_hash !== _prevTip) {
+        _shareSound.currentTime = 0;
+        _shareSound.play().catch(function () { });
+      }
+      _prevTip = data.tip_hash || "";
+      document.getElementById("shares").textContent = data.share_count;
+      document.getElementById("miners-peers").textContent = data.miner_count + " | " + data.peer_count;
+      document.getElementById("difficulty").textContent = fmtDiff(data.difficulty);
+      document.getElementById("pool-hashrate").textContent = fmtHash(data.pool_hashrate);
+      document.getElementById("local-hashrate").textContent = fmtHash(data.local_hashrate);
+      document.getElementById("ttb").textContent = fmtDuration(data.est_time_to_block);
+      document.getElementById("last-block").textContent = data.last_block_found_time ? timeAgo(data.last_block_found_time) : "-";
+      document.getElementById("last-block").title = data.last_block_found_hash || "";
+      document.getElementById("network").textContent = data.network || "-";
+      document.getElementById("uptime").textContent = fmtUptime(data.uptime_secs);
+      document.getElementById("tip-hash").textContent = truncate(data.tip_hash, 20);
+      document.getElementById("tip-miner").innerHTML = addrLink(data.tip_miner);
+      document.getElementById("target-bits").textContent = data.target_bits || "-";
+      document.getElementById("stratum-port").textContent = data.stratum_port;
+      document.getElementById("p2p-port").textContent = data.p2p_port;
+      document.getElementById("share-target-time").textContent = (data.share_target_time_secs || 0) + "s";
+      document.getElementById("pplns-window").textContent = data.pplns_window_size;
+
+      // Recent shares table (full hashes, clickable, golden for blocks)
+      var tb = document.getElementById("shares-table");
+      if (!data.recent_shares || data.recent_shares.length === 0) {
+        tb.innerHTML = '<tr><td colspan="3" class="no-data">No shares yet</td></tr>';
+      } else {
+        var h = "";
+        for (var i = 0; i < data.recent_shares.length; i++) {
+          var s = data.recent_shares[i];
+          var rowCls = s.is_block ? ' class="golden"' : "";
+          var badge = s.is_block ? '<span class="golden-badge">BLOCK</span>' : "";
+          var minerCls = (_ourAddr && s.miner !== _ourAddr) ? "miner other" : "miner";
+          h += '<tr' + rowCls + '><td class="hash" onclick="openShareDetail(\'' + esc(s.hash) + '\')">' + esc(s.hash) + badge + '</td><td class="' + minerCls + '">' + addrLink(s.miner) + '</td><td class="time">' + timeAgo(s.timestamp) + '</td></tr>';
+        }
+        tb.innerHTML = h;
+      }
+
+      // Payout Sankey diagram + table
+      sankeyPayouts = (data.payout_entries || []).map(function (e) {return {address: e.address, amount: e.amount, pct: e.pct};});
+      sankeyHoverIdx = -1;
+      drawSankey();
+      var ptbl = document.getElementById("payout-table");
+      var ptbody = document.getElementById("payout-tbody");
+      if (sankeyPayouts.length > 0) {
+        ptbl.style.display = "";
+        var ph = "";
+        for (var i = 0; i < sankeyPayouts.length; i++) {
+          var p = sankeyPayouts[i];
+          var addrCls = (_ourAddr && p.address !== _ourAddr) ? "miner other" : "miner";
+          ph += '<tr><td class="' + addrCls + '">' + addrLink(p.address) + '</td><td>' + esc(fmtBtc(p.amount)) + '</td><td>' + p.pct.toFixed(1) + '%</td></tr>';
+        }
+        ptbody.innerHTML = ph;
+      } else {
+        ptbl.style.display = "none";
+      }
+
+      // Connected Miners table
+      var mtb = document.getElementById("miners-table");
+      var minerList = data.miners || [];
+      if (minerList.length === 0) {
+        mtb.innerHTML = '<tr><td colspan="6" class="no-data">No miners connected</td></tr>';
+      } else {
+        minerList.sort(function (a, b) {return b.hashrate - a.hashrate;});
+        var mh = "";
+        for (var i = 0; i < minerList.length; i++) {
+          var m = minerList[i];
+          var cls = m.shares === 0 ? ' class="no-shares"' : "";
+          mh += '<tr' + cls + '><td>' + esc(m.worker) + '</td><td>' + fmtHash(m.hashrate) + '</td><td>' + fmtDiff(m.difficulty) + '</td><td>' + m.shares + '</td><td>' + (m.last_share_time ? timeAgo(m.last_share_time) : "-") + '</td><td>' + fmtUptime(m.connected_secs) + '</td></tr>';
+        }
+        mtb.innerHTML = mh;
+      }
+
+      // Seed graph history from server on first load, then append
+      if (!histSeeded && data.history && data.history.length > 0) {
+        histHashrate = []; histLocal = [];
+        for (var i = 0; i < data.history.length; i++) {
+          histHashrate.push({t: data.history[i].t, v: data.history[i].ph});
+          histLocal.push({t: data.history[i].t, v: data.history[i].lh});
+        }
+        histSeeded = true;
+      } else {
+        var now = Math.floor(Date.now() / 1000);
+        pushHistory(histHashrate, now, data.pool_hashrate || 0);
+        pushHistory(histLocal, now, data.local_hashrate || 0);
+      }
+      drawGraph("graph-hashrate");
+      drawGraph("graph-local");
+
+      // Peer network graph
+      peerData = data.peers || [];
+      ourPeerID = data.our_peer_id || "";
+      peerHoverIdx = -1;
+      drawPeers();
+
+      // Sharechain tree
+      treeShares = data.tree_shares || [];
+      treeHoverIdx = -1;
+      drawTree();
+    }
+
+    function poll() {
+      fetch("/api/status").then(function (r) {return r.json()}).then(update).catch(function () { });
+    }
+    poll();
+    setInterval(poll, 5000);
+
+    // Initialize graph hover handlers
+    initGraph("graph-hashrate", "rgba(51,255,51,1)", fmtHash);
+    initGraph("graph-local", "rgba(32,204,32,1)", fmtHash);
+
+    // Redraw graphs on resize
+    window.addEventListener("resize", function () {
+      drawGraph("graph-hashrate");
+      drawGraph("graph-local");
+      drawSankey();
+      drawPeers();
+      drawTree();
+    });
+  </script>
+</body>
+
+</html>

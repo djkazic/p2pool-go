@@ -1,7 +1,7 @@
 package web
 
 import (
-	_ "embed"
+	"embed"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -14,37 +14,40 @@ import (
 //go:embed assets/share_found.mp3
 var shareSoundMP3 []byte
 
+//go:embed templates/*
+var htmlFiles embed.FS
+
 // StatusData holds all dashboard metrics.
 type StatusData struct {
-	ShareCount      int                `json:"share_count"`
-	MinerCount      int                `json:"miner_count"`
-	PeerCount       int                `json:"peer_count"`
-	Difficulty      float64            `json:"difficulty"`
-	TargetBits      string             `json:"target_bits"`
-	TipHash         string             `json:"tip_hash"`
-	TipMiner        string             `json:"tip_miner"`
-	TipTime         int64              `json:"tip_time"`
-	RecentShares    []ShareInfo        `json:"recent_shares"`
-	MinerWeights    map[string]float64 `json:"miner_weights"`
-	Network         string             `json:"network"`
-	StratumPort     int                `json:"stratum_port"`
-	P2PPort         int                `json:"p2p_port"`
-	ShareTargetTime int                `json:"share_target_time_secs"`
-	PPLNSWindowSize int                `json:"pplns_window_size"`
-	Uptime          int64              `json:"uptime_secs"`
-	PoolHashrate       float64        `json:"pool_hashrate"`
-	LocalHashrate      float64        `json:"local_hashrate"`
-	LastBlockFoundTime int64          `json:"last_block_found_time"`
-	LastBlockFoundHash string         `json:"last_block_found_hash"`
-	EstTimeToBlock     int64          `json:"est_time_to_block"`
-	History            []HistoryPoint      `json:"history"`
-	OurAddress         string              `json:"our_address"`
-	PayoutEntries      []PayoutInfo        `json:"payout_entries"`
-	CoinbaseValue      int64               `json:"coinbase_value"`
-	TreeShares         []TreeShare         `json:"tree_shares"`
-	OurPeerID          string              `json:"our_peer_id"`
-	Peers              []PeerInfo          `json:"peers"`
-	Miners             []MinerStat         `json:"miners"`
+	ShareCount         int                `json:"share_count"`
+	MinerCount         int                `json:"miner_count"`
+	PeerCount          int                `json:"peer_count"`
+	Difficulty         float64            `json:"difficulty"`
+	TargetBits         string             `json:"target_bits"`
+	TipHash            string             `json:"tip_hash"`
+	TipMiner           string             `json:"tip_miner"`
+	TipTime            int64              `json:"tip_time"`
+	RecentShares       []ShareInfo        `json:"recent_shares"`
+	MinerWeights       map[string]float64 `json:"miner_weights"`
+	Network            string             `json:"network"`
+	StratumPort        int                `json:"stratum_port"`
+	P2PPort            int                `json:"p2p_port"`
+	ShareTargetTime    int                `json:"share_target_time_secs"`
+	PPLNSWindowSize    int                `json:"pplns_window_size"`
+	Uptime             int64              `json:"uptime_secs"`
+	PoolHashrate       float64            `json:"pool_hashrate"`
+	LocalHashrate      float64            `json:"local_hashrate"`
+	LastBlockFoundTime int64              `json:"last_block_found_time"`
+	LastBlockFoundHash string             `json:"last_block_found_hash"`
+	EstTimeToBlock     int64              `json:"est_time_to_block"`
+	History            []HistoryPoint     `json:"history"`
+	OurAddress         string             `json:"our_address"`
+	PayoutEntries      []PayoutInfo       `json:"payout_entries"`
+	CoinbaseValue      int64              `json:"coinbase_value"`
+	TreeShares         []TreeShare        `json:"tree_shares"`
+	OurPeerID          string             `json:"our_peer_id"`
+	Peers              []PeerInfo         `json:"peers"`
+	Miners             []MinerStat        `json:"miners"`
 }
 
 // PayoutInfo describes a single payout output for the dashboard.
@@ -91,9 +94,9 @@ type PeerInfo struct {
 
 // HistoryPoint is a single data point for dashboard graphs.
 type HistoryPoint struct {
-	Timestamp      int64   `json:"t"`
-	PoolHashrate   float64 `json:"ph"`
-	LocalHashrate  float64 `json:"lh"`
+	Timestamp     int64   `json:"t"`
+	PoolHashrate  float64 `json:"ph"`
+	LocalHashrate float64 `json:"lh"`
 }
 
 // ShareDetail holds full details for a single share.
@@ -150,6 +153,7 @@ func NewHandler(dataFunc func() *StatusData, shareLookup ShareLookupFunc) http.H
 		w.Header().Set("Content-Security-Policy",
 			"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; media-src 'self'")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
+		dashboardHTML, _ := htmlFiles.ReadFile("templates/dashboard.html")
 		w.Write([]byte(dashboardHTML))
 	})
 

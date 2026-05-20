@@ -188,6 +188,51 @@ func TestDecodeDataResp_TooManyShares(t *testing.T) {
 	}
 }
 
+// TestDecodeMode_RejectsArrayAboveCap confirms decMode enforces the
+// MaxArrayElements cap directly. Every Decode* helper goes through this
+// shared mode, so a bogus CBOR array claiming >100k elements is rejected
+// at the codec layer before allocation — defence-in-depth beneath the
+// per-message length checks above.
+func TestDecodeMode_RejectsArrayAboveCap(t *testing.T) {
+	type bigArray struct {
+		Values []int32 `cbor:"1,keyasint"`
+	}
+
+	msg := bigArray{Values: make([]int32, 100_001)}
+	data, err := Encode(msg)
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+
+	var out bigArray
+	if err := decMode.Unmarshal(data, &out); err == nil {
+		t.Fatal("expected error decoding array of 100,001 elements (cap is 100,000)")
+	}
+}
+
+// TestDecodeMode_AcceptsArrayAtCap confirms the cap is inclusive: an array
+// of exactly 100,000 elements decodes successfully (it's the rejection
+// threshold itself we care about, not legitimate near-max arrays).
+func TestDecodeMode_AcceptsArrayAtCap(t *testing.T) {
+	type bigArray struct {
+		Values []int32 `cbor:"1,keyasint"`
+	}
+
+	msg := bigArray{Values: make([]int32, 100_000)}
+	data, err := Encode(msg)
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+
+	var out bigArray
+	if err := decMode.Unmarshal(data, &out); err != nil {
+		t.Fatalf("expected success at the cap, got: %v", err)
+	}
+	if len(out.Values) != 100_000 {
+		t.Errorf("decoded length = %d, want 100000", len(out.Values))
+	}
+}
+
 func TestBigIntConversion(t *testing.T) {
 	// Test with nil
 	b := BigIntToBytes(nil)

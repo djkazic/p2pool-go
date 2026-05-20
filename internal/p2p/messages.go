@@ -93,6 +93,22 @@ type ShareResponse struct {
 	Shares []ShareMsg  `cbor:"2,keyasint"`
 }
 
+// decMode is the shared CBOR decode mode used by every Decode* helper.
+// MaxArrayElements is tightened from the library default (131,072) to
+// 100,000 — slightly below every explicit per-message cap we already
+// enforce (maxInvCount = 10,000; maxDataReqHashes = 100; etc.) so a
+// peer cannot drive the decoder to a larger transient allocation than
+// we'd ever accept post-decode. Defense-in-depth; the per-message
+// checks remain authoritative.
+var decMode cbor.DecMode = func() cbor.DecMode {
+	m, err := cbor.DecOptions{MaxArrayElements: 100_000}.DecMode()
+	if err != nil {
+		// 100_000 is in the valid range [16, 2147483647], so this is unreachable.
+		panic(fmt.Sprintf("build CBOR decode mode: %v", err))
+	}
+	return m
+}()
+
 // Encode serializes a message to CBOR.
 func Encode(msg interface{}) ([]byte, error) {
 	return cbor.Marshal(msg)
@@ -101,7 +117,7 @@ func Encode(msg interface{}) ([]byte, error) {
 // DecodeShareMsg decodes a CBOR-encoded ShareMsg.
 func DecodeShareMsg(data []byte) (*ShareMsg, error) {
 	var msg ShareMsg
-	if err := cbor.Unmarshal(data, &msg); err != nil {
+	if err := decMode.Unmarshal(data, &msg); err != nil {
 		return nil, err
 	}
 	if len(msg.CoinbaseTx) > maxP2PCoinbaseTxSize {
@@ -116,7 +132,7 @@ func DecodeShareMsg(data []byte) (*ShareMsg, error) {
 // DecodeTipAnnounce decodes a CBOR-encoded TipAnnounce.
 func DecodeTipAnnounce(data []byte) (*TipAnnounce, error) {
 	var msg TipAnnounce
-	if err := cbor.Unmarshal(data, &msg); err != nil {
+	if err := decMode.Unmarshal(data, &msg); err != nil {
 		return nil, err
 	}
 	return &msg, nil
@@ -125,7 +141,7 @@ func DecodeTipAnnounce(data []byte) (*TipAnnounce, error) {
 // DecodeShareRequest decodes a CBOR-encoded ShareRequest.
 func DecodeShareRequest(data []byte) (*ShareRequest, error) {
 	var msg ShareRequest
-	if err := cbor.Unmarshal(data, &msg); err != nil {
+	if err := decMode.Unmarshal(data, &msg); err != nil {
 		return nil, err
 	}
 	if msg.Count < 0 || msg.Count > maxShareRequestCount {
@@ -137,7 +153,7 @@ func DecodeShareRequest(data []byte) (*ShareRequest, error) {
 // DecodeShareResponse decodes a CBOR-encoded ShareResponse.
 func DecodeShareResponse(data []byte) (*ShareResponse, error) {
 	var msg ShareResponse
-	if err := cbor.Unmarshal(data, &msg); err != nil {
+	if err := decMode.Unmarshal(data, &msg); err != nil {
 		return nil, err
 	}
 	return &msg, nil
@@ -172,7 +188,7 @@ type DataResp struct {
 // DecodeInvReq decodes a CBOR-encoded InvReq.
 func DecodeInvReq(data []byte) (*InvReq, error) {
 	var msg InvReq
-	if err := cbor.Unmarshal(data, &msg); err != nil {
+	if err := decMode.Unmarshal(data, &msg); err != nil {
 		return nil, err
 	}
 	if len(msg.Locators) > maxLocatorCount {
@@ -187,7 +203,7 @@ func DecodeInvReq(data []byte) (*InvReq, error) {
 // DecodeInvResp decodes a CBOR-encoded InvResp.
 func DecodeInvResp(data []byte) (*InvResp, error) {
 	var msg InvResp
-	if err := cbor.Unmarshal(data, &msg); err != nil {
+	if err := decMode.Unmarshal(data, &msg); err != nil {
 		return nil, err
 	}
 	if len(msg.Hashes) > maxInvCount {
@@ -199,7 +215,7 @@ func DecodeInvResp(data []byte) (*InvResp, error) {
 // DecodeDataReq decodes a CBOR-encoded DataReq.
 func DecodeDataReq(data []byte) (*DataReq, error) {
 	var msg DataReq
-	if err := cbor.Unmarshal(data, &msg); err != nil {
+	if err := decMode.Unmarshal(data, &msg); err != nil {
 		return nil, err
 	}
 	if len(msg.Hashes) > maxDataReqHashes {
@@ -211,7 +227,7 @@ func DecodeDataReq(data []byte) (*DataReq, error) {
 // DecodeDataResp decodes a CBOR-encoded DataResp.
 func DecodeDataResp(data []byte) (*DataResp, error) {
 	var msg DataResp
-	if err := cbor.Unmarshal(data, &msg); err != nil {
+	if err := decMode.Unmarshal(data, &msg); err != nil {
 		return nil, err
 	}
 	if len(msg.Shares) > maxDataReqHashes {

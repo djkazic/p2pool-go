@@ -189,6 +189,9 @@ func DecodeInvResp(data []byte) (*InvResp, error) {
 	if err := cbor.Unmarshal(data, &msg); err != nil {
 		return nil, err
 	}
+	if len(msg.Hashes) > maxInvCount {
+		return nil, fmt.Errorf("inv response hash count too large: %d (max %d)", len(msg.Hashes), maxInvCount)
+	}
 	return &msg, nil
 }
 
@@ -209,6 +212,9 @@ func DecodeDataResp(data []byte) (*DataResp, error) {
 	var msg DataResp
 	if err := cbor.Unmarshal(data, &msg); err != nil {
 		return nil, err
+	}
+	if len(msg.Shares) > maxDataReqHashes {
+		return nil, fmt.Errorf("data response share count too large: %d (max %d)", len(msg.Shares), maxDataReqHashes)
 	}
 	return &msg, nil
 }

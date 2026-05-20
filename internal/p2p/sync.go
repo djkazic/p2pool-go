@@ -144,6 +144,9 @@ func (s *Syncer) RequestInventory(ctx context.Context, peerID peer.ID, locators 
 	if err != nil {
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
+	if len(resp.Hashes) > maxCount {
+		return nil, fmt.Errorf("inv response oversubscribed: got %d hashes, asked for %d", len(resp.Hashes), maxCount)
+	}
 
 	return resp, nil
 }
@@ -180,6 +183,9 @@ func (s *Syncer) RequestData(ctx context.Context, peerID peer.ID, hashes [][32]b
 	resp, err := DecodeDataResp(data)
 	if err != nil {
 		return nil, fmt.Errorf("decode response: %w", err)
+	}
+	if len(resp.Shares) > len(hashes) {
+		return nil, fmt.Errorf("data response oversubscribed: got %d shares, asked for %d", len(resp.Shares), len(hashes))
 	}
 
 	return resp, nil

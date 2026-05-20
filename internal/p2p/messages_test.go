@@ -155,6 +155,39 @@ func TestDecodeDataReq_TooManyHashes(t *testing.T) {
 	}
 }
 
+// TestDecodeInvResp_TooManyHashes is the regression test for the sync
+// amplification bug: a peer who returns more than maxInvCount hashes
+// would otherwise force the caller into hundreds of bogus DataReq
+// round-trips against the rest of the chain.
+func TestDecodeInvResp_TooManyHashes(t *testing.T) {
+	hashes := make([][32]byte, maxInvCount+1)
+	msg := &InvResp{Type: MsgTypeInvResp, Hashes: hashes}
+	data, err := Encode(msg)
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	_, err = DecodeInvResp(data)
+	if err == nil {
+		t.Fatal("expected error for oversized inv response hash count")
+	}
+}
+
+// TestDecodeDataResp_TooManyShares ensures a peer cannot ship more shares
+// than the protocol-wide per-request maximum, regardless of what the
+// caller actually requested.
+func TestDecodeDataResp_TooManyShares(t *testing.T) {
+	shares := make([]ShareMsg, maxDataReqHashes+1)
+	msg := &DataResp{Type: MsgTypeDataResp, Shares: shares}
+	data, err := Encode(msg)
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	_, err = DecodeDataResp(data)
+	if err == nil {
+		t.Fatal("expected error for oversized data response share count")
+	}
+}
+
 func TestBigIntConversion(t *testing.T) {
 	// Test with nil
 	b := BigIntToBytes(nil)

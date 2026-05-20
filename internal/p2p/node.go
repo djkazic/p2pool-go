@@ -33,7 +33,7 @@ type Node struct {
 	discovery *Discovery
 	syncer    *Syncer
 
-	incomingShares chan *ShareMsg
+	incomingShares chan *IncomingShare
 	peerConnected  chan peer.ID
 }
 
@@ -41,7 +41,12 @@ type Node struct {
 // discovery. Call StartDiscovery after registering all stream handlers
 // (e.g. InitSyncer) to avoid races where peers connect before handlers
 // are ready.
-func NewNode(ctx context.Context, listenPort int, dataDir string, logger *zap.Logger) (*Node, error) {
+//
+// shareValidate, if non-nil, runs as a gossipsub topic validator: shares
+// that fail the check are not propagated and the sending peer is
+// downscored. Pass nil to disable the pre-propagation gate (full
+// validation in the orchestrator still applies either way).
+func NewNode(ctx context.Context, listenPort int, dataDir string, shareValidate ShareValidator, logger *zap.Logger) (*Node, error) {
 	listenAddr := fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", listenPort)
 
 	// Load or create persistent identity (stable peer ID across restarts)
@@ -70,7 +75,7 @@ func NewNode(ctx context.Context, listenPort int, dataDir string, logger *zap.Lo
 		Host:           h,
 		Logger:         logger,
 		dataDir:        dataDir,
-		incomingShares: make(chan *ShareMsg, 256),
+		incomingShares: make(chan *IncomingShare, 256),
 		peerConnected:  make(chan peer.ID, 16),
 	}
 
@@ -78,7 +83,7 @@ func NewNode(ctx context.Context, listenPort int, dataDir string, logger *zap.Lo
 	h.Network().Notify(&peerNotifiee{peerConnected: node.peerConnected})
 
 	// Setup GossipSub
-	node.pubsub, err = NewPubSub(ctx, h, node.incomingShares, logger)
+	node.pubsub, err = NewPubSub(ctx, h, node.incomingShares, shareValidate, logger)
 	if err != nil {
 		h.Close()
 		return nil, fmt.Errorf("setup pubsub: %w", err)
@@ -113,9 +118,18 @@ func (n *Node) StartDiscovery(ctx context.Context, enableMDNS bool, bootnodes []
 	return nil
 }
 
-// IncomingShares returns the channel of shares received from peers.
-func (n *Node) IncomingShares() <-chan *ShareMsg {
+// IncomingShares returns the channel of shares received from peers,
+// each paired with the peer.ID that delivered it.
+func (n *Node) IncomingShares() <-chan *IncomingShare {
 	return n.incomingShares
+}
+
+// DisconnectPeer closes all connections to the given peer. Used by the
+// orchestrator to drop peers that repeatedly send provably-invalid shares.
+// The peer is free to reconnect; pair with a ConnGater blocklist if a
+// durable ban is required.
+func (n *Node) DisconnectPeer(id peer.ID) error {
+	return n.Host.Network().ClosePeer(id)
 }
 
 // BroadcastShare publishes a share to the network.

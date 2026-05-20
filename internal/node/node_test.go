@@ -10,6 +10,7 @@ import (
 	"github.com/djkazic/p2pool-go/internal/types"
 	"github.com/djkazic/p2pool-go/pkg/util"
 
+	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 )
 
@@ -382,6 +383,163 @@ func TestShareConversion_RoundTrip(t *testing.T) {
 	}
 	if back.PrevShareHash != share.PrevShareHash {
 		t.Error("PrevShareHash mismatch")
+	}
+}
+
+// --- Per-peer misbehavior tracking ---
+
+func newScoredNode(t *testing.T) *Node {
+	t.Helper()
+	logger, _ := zap.NewDevelopment()
+	return &Node{
+		logger:     logger,
+		peerScores: make(map[peer.ID]*peerScore),
+	}
+}
+
+func TestRecordPeerOutcome_BelowMinBadDoesNotTrip(t *testing.T) {
+	n := newScoredNode(t)
+	id := peer.ID("test-peer-1")
+	for i := 0; i < peerScoreMinBad-1; i++ {
+		if n.recordPeerOutcome(id, true) {
+			t.Fatalf("disconnect tripped at bad=%d, minimum is %d", i+1, peerScoreMinBad)
+		}
+	}
+}
+
+func TestRecordPeerOutcome_ThresholdTripsAtMinBad(t *testing.T) {
+	n := newScoredNode(t)
+	id := peer.ID("test-peer-1")
+	for i := 0; i < peerScoreMinBad-1; i++ {
+		n.recordPeerOutcome(id, true)
+	}
+	if !n.recordPeerOutcome(id, true) {
+		t.Fatalf("expected disconnect at bad=%d", peerScoreMinBad)
+	}
+	// Once disconnected, subsequent calls don't re-trip.
+	if n.recordPeerOutcome(id, true) {
+		t.Error("disconnect tripped twice for the same peer")
+	}
+}
+
+func TestRecordPeerOutcome_GoodSharesGateRatio(t *testing.T) {
+	// 5 bad mixed into 100 good: bad/(good+bad) = 5/105 ≈ 4.8%, below
+	// the 20% ratio gate. An otherwise-cooperative peer who occasionally
+	// races during sync must not get banned.
+	n := newScoredNode(t)
+	id := peer.ID("test-peer-1")
+	for i := 0; i < 100; i++ {
+		if n.recordPeerOutcome(id, false) {
+			t.Fatal("good share should never trip disconnect")
+		}
+	}
+	for i := 0; i < peerScoreMinBad; i++ {
+		if n.recordPeerOutcome(id, true) {
+			t.Fatalf("disconnect tripped despite %d good shares against %d bad",
+				100, i+1)
+		}
+	}
+}
+
+func TestRecordPeerOutcome_PerPeerIndependence(t *testing.T) {
+	n := newScoredNode(t)
+	bad := peer.ID("peer-bad")
+	ok := peer.ID("peer-ok")
+	for i := 0; i < peerScoreMinBad-1; i++ {
+		n.recordPeerOutcome(bad, true)
+		n.recordPeerOutcome(ok, false)
+	}
+	if n.recordPeerOutcome(ok, false) {
+		t.Error("good peer disconnected")
+	}
+	if !n.recordPeerOutcome(bad, true) {
+		t.Error("bad peer not disconnected at threshold")
+	}
+}
+
+// TestHandleP2PShare_IndeterminateDoesNotPenalize confirms the end-to-end
+// invariant: a share whose parent is unknown (the canonical sync race)
+// reaches AddShare, is rejected with CategoryIndeterminate, and the
+// sender's bad counter stays at zero.
+func TestHandleP2PShare_IndeterminateDoesNotPenalize(t *testing.T) {
+	n, _ := testNode(t)
+	n.peerScores = make(map[peer.ID]*peerScore)
+
+	unknownParent := [32]byte{}
+	unknownParent[0] = 0xff
+	share := makeTestShare(unknownParent, testMiner1, uint32(time.Now().Unix()))
+	msg := shareToP2PMsg(share)
+	from := peer.ID("test-peer-1")
+
+	for i := 0; i < peerScoreMinBad+10; i++ {
+		n.handleP2PShare(&p2p.IncomingShare{Share: msg, From: from})
+	}
+
+	// Indeterminate failures intentionally do not create a peer-score
+	// entry; if one happens to exist (e.g. from an earlier success in a
+	// larger test), it must show zero bad shares and not be disconnected.
+	n.peerScoresMu.Lock()
+	defer n.peerScoresMu.Unlock()
+	if ps := n.peerScores[from]; ps != nil {
+		if ps.bad != 0 {
+			t.Errorf("bad counter = %d after %d indeterminate failures; want 0",
+				ps.bad, peerScoreMinBad+10)
+		}
+		if ps.disconnected {
+			t.Error("peer was disconnected for indeterminate failures")
+		}
+	}
+}
+
+// --- Gossipsub topic validator ---
+
+func TestValidateGossipShare_AcceptsHonest(t *testing.T) {
+	share := makeTestShare([32]byte{}, testMiner1, 1700000000)
+	msg := shareToP2PMsg(share)
+	if !validateGossipShare(msg) {
+		t.Error("expected accept for honest share that passes its declared target")
+	}
+}
+
+func TestValidateGossipShare_RejectsBadPoW(t *testing.T) {
+	// Declare Bitcoin difficulty 1 (target ≈ 2^208). With any random Nonce
+	// and otherwise-zero header, the hash misses this target with overwhelming
+	// probability (~1 - 2^-48), so the cheap check must reject.
+	msg := &p2p.ShareMsg{
+		Type:            p2p.MsgTypeShare,
+		Version:         1,
+		ShareVersion:    1,
+		MinerAddress:    testMiner1,
+		ShareTargetBits: 0x1d00ffff,
+		Nonce:           0xdeadbeef,
+	}
+	if validateGossipShare(msg) {
+		t.Error("expected reject for share whose hash does not meet declared target")
+	}
+}
+
+func TestValidateGossipShare_RejectsDeclaredAboveMax(t *testing.T) {
+	// 0x217fffff decodes to a target 256× larger than MaxShareTarget, well
+	// outside the protocol's allowed easiest difficulty. Any share claiming
+	// such an easy target is bogus regardless of the PoW it carries.
+	msg := &p2p.ShareMsg{
+		Type:            p2p.MsgTypeShare,
+		ShareTargetBits: 0x217fffff,
+	}
+	if validateGossipShare(msg) {
+		t.Error("expected reject for declared target above MaxShareTarget")
+	}
+}
+
+func TestValidateGossipShare_RejectsZeroTarget(t *testing.T) {
+	// ShareTargetBits = 0 decodes to target = 0; no hash can meet it.
+	// The cheap check must reject without dividing by zero or hashing.
+	msg := &p2p.ShareMsg{
+		Type:            p2p.MsgTypeShare,
+		ShareTargetBits: 0,
+	}
+	if validateGossipShare(msg) {
+		t.Error("expected reject for zero declared target")
 	}
 }
 

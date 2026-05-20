@@ -796,3 +796,83 @@ func TestValidation_RejectsMissingCoinbase(t *testing.T) {
 		t.Error("expected rejection for missing coinbase")
 	}
 }
+
+// extractValidationError unwraps the error returned by AddShare to get the
+// underlying *ValidationError (chain.AddShare wraps with fmt.Errorf("invalid
+// share: %w", err)). Returns nil if the chain doesn't end in a ValidationError.
+func extractValidationError(t *testing.T, err error) *ValidationError {
+	t.Helper()
+	var vErr *ValidationError
+	if !errorsAs(err, &vErr) {
+		return nil
+	}
+	return vErr
+}
+
+// errorsAs avoids importing "errors" just for one helper.
+func errorsAs(err error, target **ValidationError) bool {
+	for err != nil {
+		if v, ok := err.(*ValidationError); ok {
+			*target = v
+			return true
+		}
+		type unwrapper interface{ Unwrap() error }
+		u, ok := err.(unwrapper)
+		if !ok {
+			return false
+		}
+		err = u.Unwrap()
+	}
+	return false
+}
+
+// TestValidation_ParentNotFoundIsIndeterminate asserts the one error path
+// the misbehavior tracker treats as not-the-peer's-fault: a share whose
+// parent we haven't synced yet must surface CategoryIndeterminate so the
+// orchestrator does not penalize an honest peer racing ahead of our sync.
+func TestValidation_ParentNotFoundIsIndeterminate(t *testing.T) {
+	store := NewMemoryStore()
+	diffCalc := NewDifficultyCalculator(30 * time.Second)
+	chain := NewShareChain(store, diffCalc, 8640, testNetwork, testLogger())
+
+	unknownParent := [32]byte{}
+	unknownParent[0] = 0xff // any non-zero hash that isn't in the empty store
+	share := makeTestShare(unknownParent, testMiner1, uint32(time.Now().Unix()))
+
+	err := chain.AddShare(share)
+	if err == nil {
+		t.Fatal("expected rejection for unknown parent")
+	}
+	vErr := extractValidationError(t, err)
+	if vErr == nil {
+		t.Fatalf("expected *ValidationError in chain, got: %v", err)
+	}
+	if vErr.Category != CategoryIndeterminate {
+		t.Errorf("category = %v, want CategoryIndeterminate", vErr.Category)
+	}
+}
+
+// TestValidation_ProvableRejectionsAreProvable asserts that the default-zero
+// category is the Provable case — every existing rejection (wrong commitment,
+// wrong miner-in-outputs, target mismatch, etc.) flows into the peer
+// misbehavior counter as intended.
+func TestValidation_ProvableRejectionsAreProvable(t *testing.T) {
+	store := NewMemoryStore()
+	diffCalc := NewDifficultyCalculator(30 * time.Second)
+	chain := NewShareChain(store, diffCalc, 8640, testNetwork, testLogger())
+
+	share := makeTestShare([32]byte{}, testMiner1, uint32(time.Now().Unix()))
+	share.CoinbaseTx = nil // canonical Provable rejection
+
+	err := chain.AddShare(share)
+	if err == nil {
+		t.Fatal("expected rejection for missing coinbase")
+	}
+	vErr := extractValidationError(t, err)
+	if vErr == nil {
+		t.Fatalf("expected *ValidationError in chain, got: %v", err)
+	}
+	if vErr.Category != CategoryProvable {
+		t.Errorf("category = %v, want CategoryProvable", vErr.Category)
+	}
+}

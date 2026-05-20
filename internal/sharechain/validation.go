@@ -31,9 +31,27 @@ const (
 	maxMinerAddressLen = 128
 )
 
+// ValidationCategory classifies whether a rejection is the sender's fault.
+//
+// CategoryProvable: the share is definitively invalid, regardless of our
+// chain state — wrong commitment, miner not in outputs, mismatched target,
+// future timestamp past the protocol bound, etc. A peer relaying such a
+// share is either malicious or buggy; misbehavior counters should fire.
+//
+// CategoryIndeterminate: we can't tell yet, typically because we're behind
+// on sync and don't know the parent. An honest peer ahead of us will
+// produce this; do NOT penalize.
+type ValidationCategory int
+
+const (
+	CategoryProvable ValidationCategory = iota
+	CategoryIndeterminate
+)
+
 // ValidationError represents a share validation failure.
 type ValidationError struct {
-	Reason string
+	Reason   string
+	Category ValidationCategory
 }
 
 func (e *ValidationError) Error() string {
@@ -80,11 +98,15 @@ func (v *Validator) ValidateShare(share *types.Share) error {
 		return &ValidationError{Reason: fmt.Sprintf("invalid miner address: %v", err)}
 	}
 
-	// 3. Parent exists (unless genesis)
+	// 3. Parent exists (unless genesis). The only Indeterminate case: an
+	// honest peer ahead of our sync would trip this, so do not penalize.
 	var zeroHash [32]byte
 	if share.PrevShareHash != zeroHash {
 		if !v.store.Has(share.PrevShareHash) {
-			return &ValidationError{Reason: fmt.Sprintf("parent share %x not found", share.PrevShareHash[:8])}
+			return &ValidationError{
+				Reason:   fmt.Sprintf("parent share %x not found", share.PrevShareHash[:8]),
+				Category: CategoryIndeterminate,
+			}
 		}
 	}
 

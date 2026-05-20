@@ -59,6 +59,12 @@ type Node struct {
 	shareRejectCount uint64
 	startTime        time.Time
 
+	// Per-peer misbehavior tracking. Bumped from handleP2PShare based on
+	// the ValidationCategory of the full-validation result; threshold
+	// crossings trigger DisconnectPeer.
+	peerScores   map[peer.ID]*peerScore
+	peerScoresMu sync.Mutex
+
 	// Local hashrate tracking (rolling window of valid stratum shares)
 	localShares   []localShareEvent
 	localSharesMu sync.Mutex
@@ -88,7 +94,52 @@ func NewNode(cfg *config.Config, minerAddress string, logger *zap.Logger) *Node 
 		config:       cfg,
 		logger:       logger,
 		minerAddress: minerAddress,
+		peerScores:   make(map[peer.ID]*peerScore),
 	}
+}
+
+// peerScore tracks a peer's track record of delivering valid shares.
+// Bad shares are counted only when ValidationCategory == Provable.
+type peerScore struct {
+	good, bad int
+	disconnected bool
+}
+
+// Misbehavior policy tuning. Trip when both:
+//   - bad >= peerScoreMinBad (statistical floor — one share doesn't ban),
+//   - bad / (good+bad) > peerScoreBadRatio (ratio gate — a peer that's
+//     overwhelmingly delivering junk, not someone racing during sync).
+const (
+	peerScoreMinBad    = 5
+	peerScoreBadRatio  = 0.2 // 20%
+)
+
+// recordPeerOutcome bumps the peer's counters and returns true if the
+// threshold for disconnect has just been crossed. Caller is expected to
+// disconnect on true; subsequent calls for the same peer return false
+// because we only disconnect once.
+func (n *Node) recordPeerOutcome(id peer.ID, provableBad bool) bool {
+	n.peerScoresMu.Lock()
+	defer n.peerScoresMu.Unlock()
+	ps, ok := n.peerScores[id]
+	if !ok {
+		ps = &peerScore{}
+		n.peerScores[id] = ps
+	}
+	if provableBad {
+		ps.bad++
+	} else {
+		ps.good++
+	}
+	if ps.disconnected {
+		return false
+	}
+	total := ps.good + ps.bad
+	if ps.bad >= peerScoreMinBad && float64(ps.bad) > peerScoreBadRatio*float64(total) {
+		ps.disconnected = true
+		return true
+	}
+	return false
 }
 
 // Start initializes and starts all subsystems.
@@ -155,8 +206,11 @@ func (n *Node) Start(ctx context.Context) error {
 	)
 	n.workGen.Start(ctx)
 
-	// P2P Node — create host and register handlers before discovery starts
-	n.p2pNode, err = p2p.NewNode(ctx, n.config.P2PPort, n.config.DataDir, n.logger)
+	// P2P Node — create host and register handlers before discovery starts.
+	// validateGossipShare is a cheap pre-propagation gate; full validation
+	// (parent lookup, expected-target match, coinbase commitment, etc.)
+	// still runs later in chain.AddShare.
+	n.p2pNode, err = p2p.NewNode(ctx, n.config.P2PPort, n.config.DataDir, validateGossipShare, n.logger)
 	if err != nil {
 		return fmt.Errorf("p2p node: %w", err)
 	}
@@ -228,8 +282,8 @@ func (n *Node) eventLoop(ctx context.Context) {
 			n.handleSubmission(submission)
 
 		// Share from P2P network
-		case shareMsg := <-n.p2pNode.IncomingShares():
-			n.handleP2PShare(shareMsg)
+		case incoming := <-n.p2pNode.IncomingShares():
+			n.handleP2PShare(incoming)
 
 		// Sharechain events (new tip, new block, reorg)
 		case event := <-chainEvents:
@@ -408,17 +462,57 @@ func (n *Node) handleSubmission(sub *stratum.ShareSubmission) {
 	}
 }
 
-func (n *Node) handleP2PShare(msg *p2p.ShareMsg) {
-	share := p2pShareToShare(msg)
+func (n *Node) handleP2PShare(incoming *p2p.IncomingShare) {
+	from := incoming.From
+	share := p2pShareToShare(incoming.Share)
 	if share == nil {
-		n.logger.Debug("rejected P2P share: failed to decompress coinbase")
+		// Failed coinbase decompression is provable misbehavior — the cheap
+		// gossipsub validator already accepted the wire format, so a bad
+		// payload here is a malformed compressed coinbase.
+		n.logger.Debug("rejected P2P share: failed to decompress coinbase",
+			zap.String("peer", from.String()))
+		if n.recordPeerOutcome(from, true) {
+			n.dropMisbehavingPeer(from)
+		}
 		return
 	}
-	if err := n.chain.AddShare(share); err != nil {
-		n.logger.Debug("rejected P2P share", zap.Error(err))
+	err := n.chain.AddShare(share)
+	if err == nil {
+		n.logger.Debug("accepted P2P share",
+			zap.String("hash", share.HashHex()),
+			zap.String("peer", from.String()))
+		n.recordPeerOutcome(from, false)
 		return
 	}
-	n.logger.Debug("accepted P2P share", zap.String("hash", share.HashHex()))
+
+	// Classify the failure. Only Provable rejections count against the peer;
+	// Indeterminate (parent-not-found during sync) does not penalize an
+	// honest peer who is simply ahead of us.
+	var vErr *sharechain.ValidationError
+	provable := errors.As(err, &vErr) && vErr.Category == sharechain.CategoryProvable
+	n.logger.Debug("rejected P2P share",
+		zap.String("peer", from.String()),
+		zap.Bool("provable", provable),
+		zap.Error(err))
+	if !provable {
+		return
+	}
+	if n.recordPeerOutcome(from, true) {
+		n.dropMisbehavingPeer(from)
+	}
+}
+
+// dropMisbehavingPeer closes the connection to a peer that has crossed
+// the bad-share threshold. The peer may reconnect (we do not maintain a
+// durable blocklist yet); on reconnect the counter starts over, so a
+// rotating attacker still pays the round-trip cost of producing
+// peerScoreMinBad provable misbehaviors per identity.
+func (n *Node) dropMisbehavingPeer(id peer.ID) {
+	n.logger.Warn("disconnecting peer for repeated provable misbehavior",
+		zap.String("peer", id.String()))
+	if err := n.p2pNode.DisconnectPeer(id); err != nil {
+		n.logger.Debug("disconnect failed", zap.String("peer", id.String()), zap.Error(err))
+	}
 }
 
 func (n *Node) handleChainEvent(event sharechain.Event) {
@@ -1414,6 +1508,31 @@ func p2pShareToShare(msg *p2p.ShareMsg) *types.Share {
 		MinerAddress:  msg.MinerAddress,
 		CoinbaseTx:    coinbaseTx,
 	}
+}
+
+// validateGossipShare is the cheap pre-propagation check registered as a
+// gossipsub topic validator. Any share whose hash does not meet its declared
+// target, or whose declared target is easier than the protocol-allowed
+// maximum, is rejected — gossipsub does not propagate it and downscores the
+// sender. The check intentionally avoids chain state / locks; full
+// validation runs later in chain.AddShare.
+//
+// Defined as a package function (not a method) so it can be wired before the
+// orchestrator is fully constructed and unit-tested without spinning up libp2p.
+func validateGossipShare(msg *p2p.ShareMsg) bool {
+	header := types.ShareHeader{
+		Version:       msg.Version,
+		PrevBlockHash: msg.PrevBlockHash,
+		MerkleRoot:    msg.MerkleRoot,
+		Timestamp:     msg.Timestamp,
+		Bits:          msg.Bits,
+		Nonce:         msg.Nonce,
+	}
+	declared := util.CompactToTarget(msg.ShareTargetBits)
+	if declared.Sign() <= 0 || declared.Cmp(sharechain.MaxShareTarget) > 0 {
+		return false
+	}
+	return util.HashMeetsTarget(header.Hash(), declared)
 }
 
 // shareToP2PMsg converts a types.Share to a P2P share message.

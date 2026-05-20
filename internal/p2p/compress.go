@@ -6,7 +6,12 @@ import (
 
 var (
 	zstdEncoder, _ = zstd.NewWriter(nil, zstd.WithEncoderLevel(zstd.SpeedDefault))
-	zstdDecoder, _ = zstd.NewReader(nil, zstd.WithDecoderMaxMemory(1<<20))
+	// Cap decoded output at 128 KB. Real coinbases are 1–4 KB and the
+	// validator rejects anything over 100 KB (maxCoinbaseTxSize), so 128 KB
+	// is the smallest cap that gives headroom without enabling amplification:
+	// a ~100-byte zstd payload of zeros otherwise expands to the full cap
+	// before the validator runs.
+	zstdDecoder, _ = zstd.NewReader(nil, zstd.WithDecoderMaxMemory(128*1024))
 )
 
 // CompressCoinbase compresses coinbase transaction bytes using zstd.

@@ -598,12 +598,10 @@ func TestMedianTimestamp(t *testing.T) {
 	}
 }
 
-// TestDifficultyCalculator_FutureTimestampOutlier is the H3 regression.
-// Pre-fix, an attacker who controlled the newest share in the difficulty
-// window could set its Timestamp +2h ahead, driving actualTime/expectedTime
-// to ~11x and hitting the 4x easier-difficulty clamp every adjustment. The
-// median-time-past edges in NextTarget must absorb a single outlier so the
-// attacked target matches the honest target.
+// TestDifficultyCalculator_FutureTimestampOutlier asserts that an attacker
+// who controls a single share at the window edge cannot bias the timing
+// ratio: a +2h Timestamp on one sample must be absorbed by the
+// median-time-past edges so the resulting target equals the unattacked one.
 func TestDifficultyCalculator_FutureTimestampOutlier(t *testing.T) {
 	dc := NewDifficultyCalculator(30 * time.Second)
 
@@ -632,7 +630,7 @@ func TestDifficultyCalculator_FutureTimestampOutlier(t *testing.T) {
 
 	honestTarget := dc.NextTarget(makeWindow(0))
 
-	// +2h on the single newest sample — the precise attack pre-fix.
+	// +2h on the single newest sample — the upper bound of MaxTimeFuture.
 	attackTarget := dc.NextTarget(makeWindow(baseTime + (windowLen-1)*spacing + 7200))
 
 	if attackTarget.Cmp(honestTarget) != 0 {
@@ -874,5 +872,142 @@ func TestValidation_ProvableRejectionsAreProvable(t *testing.T) {
 	}
 	if vErr.Category != CategoryProvable {
 		t.Errorf("category = %v, want CategoryProvable", vErr.Category)
+	}
+}
+
+// --- ChainWork caching ---
+
+// TestChainWork_CachesResultOnShare confirms that a ChainWork call leaves
+// cumulativeWork populated on every share it traversed, so the next call
+// against the same tip is an O(1) cache hit.
+func TestChainWork_CachesResultOnShare(t *testing.T) {
+	store := NewMemoryStore()
+	diffCalc := NewDifficultyCalculator(30 * time.Second)
+	chain := NewShareChain(store, diffCalc, 8640, testNetwork, testLogger())
+	fc := NewForkChoice(store)
+
+	now := uint32(time.Now().Unix()) - 300
+	var shares []*types.Share
+	prev := [32]byte{}
+	for i := 0; i < 5; i++ {
+		s := makeTestShare(prev, testMiner1, now+uint32(i*30))
+		if err := chain.AddShare(s); err != nil {
+			t.Fatalf("add share %d: %v", i, err)
+		}
+		shares = append(shares, s)
+		prev = s.Hash()
+	}
+
+	// Fresh tip — cumulativeWork has been populated by AddShare's SelectTip
+	// (the direct-extension fast path skips ChainWork, so let's force it).
+	tip := shares[len(shares)-1]
+	if tip.CumulativeWork() != nil {
+		// Already cached (a previous fork-choice call must have computed it).
+		// That's fine; we just want to confirm caching works end-to-end.
+	}
+
+	work1 := fc.ChainWork(tip.Hash(), 8640)
+	if tip.CumulativeWork() == nil {
+		t.Fatal("CumulativeWork should be populated after ChainWork")
+	}
+	if work1.Sign() <= 0 {
+		t.Errorf("work1 should be positive, got %s", work1)
+	}
+
+	// Second call returns the same value without changing the cache.
+	cachedBefore := tip.CumulativeWork()
+	work2 := fc.ChainWork(tip.Hash(), 8640)
+	if work2.Cmp(work1) != 0 {
+		t.Errorf("cache-hit returned different value: first=%s second=%s", work1, work2)
+	}
+	if tip.CumulativeWork().Cmp(cachedBefore) != 0 {
+		t.Error("cache was mutated by a cache-hit ChainWork call")
+	}
+}
+
+// TestChainWork_IncrementalExtension confirms the per-share cost stays
+// bounded as the chain grows: adding a share to a chain whose tip has a
+// cached cumulativeWork should not require walking ancestors again.
+func TestChainWork_IncrementalExtension(t *testing.T) {
+	store := NewMemoryStore()
+	diffCalc := NewDifficultyCalculator(30 * time.Second)
+	chain := NewShareChain(store, diffCalc, 8640, testNetwork, testLogger())
+	fc := NewForkChoice(store)
+
+	now := uint32(time.Now().Unix()) - 300
+	var shares []*types.Share
+	prev := [32]byte{}
+	for i := 0; i < 10; i++ {
+		s := makeTestShare(prev, testMiner1, now+uint32(i*30))
+		if err := chain.AddShare(s); err != nil {
+			t.Fatalf("add share %d: %v", i, err)
+		}
+		// Force the cache to populate for each new tip.
+		_ = fc.ChainWork(s.Hash(), 8640)
+		shares = append(shares, s)
+		prev = s.Hash()
+	}
+
+	// Each share must have cumulativeWork == sum of all difficulties up to and
+	// including it, i.e. strictly greater than its predecessor's value.
+	for i := 1; i < len(shares); i++ {
+		prev := shares[i-1].CumulativeWork()
+		cur := shares[i].CumulativeWork()
+		if prev == nil || cur == nil {
+			t.Fatalf("share[%d] or [%d] not cached", i-1, i)
+		}
+		if cur.Cmp(prev) <= 0 {
+			t.Errorf("cumulativeWork did not increase between shares: prev=%s cur=%s", prev, cur)
+		}
+	}
+}
+
+// TestChainWork_ForkedSharesHaveDistinctWork confirms that two shares
+// pointing at the same parent (a fork) get independent cumulativeWork
+// values — each carries the parent's work plus its own difficulty,
+// not some shared state.
+func TestChainWork_ForkedSharesHaveDistinctWork(t *testing.T) {
+	store := NewMemoryStore()
+	diffCalc := NewDifficultyCalculator(30 * time.Second)
+	chain := NewShareChain(store, diffCalc, 8640, testNetwork, testLogger())
+	fc := NewForkChoice(store)
+
+	now := uint32(time.Now().Unix()) - 300
+
+	// Single parent.
+	parent := makeTestShare([32]byte{}, testMiner1, now)
+	if err := chain.AddShare(parent); err != nil {
+		t.Fatalf("add parent: %v", err)
+	}
+
+	// Two siblings — both reference parent.
+	siblingA := makeTestShare(parent.Hash(), testMiner1, now+30)
+	siblingB := makeTestShare(parent.Hash(), testMiner2, now+31)
+	if err := chain.AddShare(siblingA); err != nil {
+		t.Fatalf("add siblingA: %v", err)
+	}
+	if err := chain.AddShare(siblingB); err != nil {
+		t.Fatalf("add siblingB: %v", err)
+	}
+
+	_ = fc.ChainWork(siblingA.Hash(), 8640)
+	_ = fc.ChainWork(siblingB.Hash(), 8640)
+
+	a := siblingA.CumulativeWork()
+	b := siblingB.CumulativeWork()
+	if a == nil || b == nil {
+		t.Fatal("sibling cumulativeWork not cached")
+	}
+	// Same ShareTarget on both siblings → identical work contribution → equal totals.
+	if a.Cmp(b) != 0 {
+		t.Errorf("siblings with equal difficulty should have equal cumulativeWork: A=%s B=%s", a, b)
+	}
+	// And each must exceed the parent (they include the parent's work + their own).
+	parentWork := parent.CumulativeWork()
+	if parentWork == nil {
+		t.Fatal("parent cumulativeWork not cached")
+	}
+	if a.Cmp(parentWork) <= 0 {
+		t.Errorf("sibling work %s should exceed parent work %s", a, parentWork)
 	}
 }

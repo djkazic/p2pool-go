@@ -3,6 +3,7 @@ package sharechain
 import (
 	"math/big"
 
+	"github.com/djkazic/p2pool-go/internal/types"
 	"github.com/djkazic/p2pool-go/pkg/util"
 )
 
@@ -16,35 +17,75 @@ func NewForkChoice(store ShareStore) *ForkChoice {
 	return &ForkChoice{store: store}
 }
 
+// shareDifficulty returns the work contribution of a single share.
+// Helper for ChainWork.
+func shareDifficulty(share *types.Share) *big.Int {
+	if share.ShareTarget != nil && share.ShareTarget.Sign() > 0 {
+		return new(big.Int).Div(MaxShareTarget, share.ShareTarget)
+	}
+	return big.NewInt(1)
+}
+
 // ChainWork calculates the cumulative work of a chain ending at the given share.
 // Work is defined as the sum of difficulties of all shares in the chain.
+//
+// Each share's cumulative work is cached on the share itself the first time
+// it's computed. Subsequent ChainWork calls then walk only as far as the
+// first cached ancestor, accumulating forward. In steady state (where the
+// parent is already cached from a previous SelectTip), each call is O(1).
+//
+// Callers must hold the chain mutex in write mode: the cache is mutated
+// during the walk. ForkChoice is only invoked from AddShare/AddShareQuiet
+// (chain.go), both of which hold sc.mu.Lock.
+//
+// maxDepth bounds the walk defensively; the result is only cached when the
+// walk reaches a real boundary (genesis, prune-edge, or an already-cached
+// ancestor) so we never store a partial sum.
 func (fc *ForkChoice) ChainWork(tipHash [32]byte, maxDepth int) *big.Int {
-	totalWork := new(big.Int)
-	current := tipHash
-	var zeroHash [32]byte
-
-	for i := 0; i < maxDepth; i++ {
-		share, ok := fc.store.Get(current)
-		if !ok {
-			break
-		}
-
-		// Work for this share = target_max / share_target (i.e., difficulty)
-		if share.ShareTarget != nil && share.ShareTarget.Sign() > 0 {
-			work := new(big.Int).Div(MaxShareTarget, share.ShareTarget)
-			totalWork.Add(totalWork, work)
-		} else {
-			// If no share target, count as difficulty 1
-			totalWork.Add(totalWork, big.NewInt(1))
-		}
-
-		current = share.PrevShareHash
-		if current == zeroHash {
-			break
-		}
+	tip, ok := fc.store.Get(tipHash)
+	if !ok {
+		return new(big.Int)
+	}
+	if cached := tip.CumulativeWork(); cached != nil {
+		return cached
 	}
 
-	return totalWork
+	// Walk back, collecting shares until we hit a cached ancestor or boundary.
+	pending := []*types.Share{tip}
+	current := tip.PrevShareHash
+	var zeroHash [32]byte
+
+	baseWork := new(big.Int)
+	reachedBoundary := false
+	for i := 1; i < maxDepth; i++ {
+		if current == zeroHash {
+			reachedBoundary = true
+			break
+		}
+		s, ok := fc.store.Get(current)
+		if !ok {
+			reachedBoundary = true // prune edge — anything beyond is unknowable from here
+			break
+		}
+		if cached := s.CumulativeWork(); cached != nil {
+			baseWork = cached
+			reachedBoundary = true
+			break
+		}
+		pending = append(pending, s)
+		current = s.PrevShareHash
+	}
+
+	// Walk forward (oldest pending first), accumulating and caching.
+	work := new(big.Int).Set(baseWork)
+	for i := len(pending) - 1; i >= 0; i-- {
+		s := pending[i]
+		work.Add(work, shareDifficulty(s))
+		if reachedBoundary {
+			s.SetCumulativeWork(work)
+		}
+	}
+	return new(big.Int).Set(work)
 }
 
 // SelectTip chooses between the current tip and a new candidate share.

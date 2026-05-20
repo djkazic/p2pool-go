@@ -51,6 +51,30 @@ type Share struct {
 
 	// Cached/computed fields
 	hash *[32]byte
+
+	// cumulativeWork is the total chain work back to genesis/prune-boundary
+	// (inclusive of this share). Populated lazily by ForkChoice.ChainWork
+	// and accessed only via CumulativeWork / SetCumulativeWork. Mutations
+	// are serialized by the chain mutex (only ForkChoice writes, only from
+	// AddShare/AddShareQuiet paths which hold sc.mu.Lock).
+	cumulativeWork *big.Int
+}
+
+// CumulativeWork returns the cached cumulative chain work, or nil if it
+// has not been computed yet. Returns a defensive copy; callers must not
+// mutate the result.
+func (s *Share) CumulativeWork() *big.Int {
+	if s.cumulativeWork == nil {
+		return nil
+	}
+	return new(big.Int).Set(s.cumulativeWork)
+}
+
+// SetCumulativeWork stores the cumulative chain work. Intended for use by
+// fork choice; takes a defensive copy so the caller's big.Int can be
+// mutated freely afterwards.
+func (s *Share) SetCumulativeWork(work *big.Int) {
+	s.cumulativeWork = new(big.Int).Set(work)
 }
 
 // Hash returns the share's hash (Bitcoin block header hash). Cached after first computation.

@@ -194,11 +194,10 @@ func TestParseCoinbaseOutputs_Malformed(t *testing.T) {
 	}
 }
 
-// TestParseCoinbaseOutputs_HugeOutputCount is the regression test for the
-// unbounded `make([]CoinbaseOutput, 0, outputCount)` OOM. A peer-controlled
-// varint declaring 2^32-1 outputs previously crashed the node before the
-// loop's per-output bounds checks ran. After the fix, parsing must return
-// a validation error without panicking or allocating.
+// TestParseCoinbaseOutputs_HugeOutputCount asserts that a peer-controlled
+// varint declaring 2^32-1 outputs is rejected with a validation error
+// rather than driving make([]CoinbaseOutput, 0, outputCount) into an OOM
+// before the per-output bounds checks have a chance to run.
 func TestParseCoinbaseOutputs_HugeOutputCount(t *testing.T) {
 	// Minimal coinbase with output count = 0xffffffff (varint 0xfe + 4 LE bytes).
 	tx := []byte{

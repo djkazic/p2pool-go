@@ -155,10 +155,9 @@ func TestDecodeDataReq_TooManyHashes(t *testing.T) {
 	}
 }
 
-// TestDecodeInvResp_TooManyHashes is the regression test for the sync
-// amplification bug: a peer who returns more than maxInvCount hashes
-// would otherwise force the caller into hundreds of bogus DataReq
-// round-trips against the rest of the chain.
+// TestDecodeInvResp_TooManyHashes asserts that an inv response advertising
+// more than maxInvCount hashes is rejected at decode time, so a peer
+// cannot drive the caller into hundreds of bogus DataReq round-trips.
 func TestDecodeInvResp_TooManyHashes(t *testing.T) {
 	hashes := make([][32]byte, maxInvCount+1)
 	msg := &InvResp{Type: MsgTypeInvResp, Hashes: hashes}

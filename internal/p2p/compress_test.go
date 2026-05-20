@@ -30,10 +30,9 @@ func TestDecompressCoinbase_PassthroughNonZstd(t *testing.T) {
 	}
 }
 
-// TestDecompressCoinbase_BombRejected is the regression test for the
-// decompression amplification: a small zstd payload that decodes to more
-// than the 128 KB cap (WithDecoderMaxMemory) must error out rather than
-// returning a huge buffer to the caller.
+// TestDecompressCoinbase_BombRejected asserts that a small zstd payload
+// which would decompress past the 128 KB WithDecoderMaxMemory cap errors
+// out instead of returning an oversized buffer to the caller.
 func TestDecompressCoinbase_BombRejected(t *testing.T) {
 	// 256 KB of zeros compresses to ~30 bytes with zstd.
 	bomb := CompressCoinbase(make([]byte, 256*1024))

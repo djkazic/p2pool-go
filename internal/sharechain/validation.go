@@ -22,9 +22,11 @@ const (
 	MaxTimePast = 10 * time.Minute
 
 	// maxCoinbaseTxSize is the maximum allowed coinbase transaction size.
-	// Bitcoin consensus allows up to ~1MB, but a legitimate coinbase is
-	// typically under 1KB. 100KB is generous.
-	maxCoinbaseTxSize = 100 * 1024
+	// Bitcoin consensus allows up to ~1 MB, but a legitimate coinbase is
+	// 1–4 KB; even a PPLNS payout with ~200 P2WPKH outputs fits well
+	// under 8 KB. Tighter cap removes attacker bandwidth/memory surface
+	// (was 100 KB, ~25× larger than any realistic value).
+	maxCoinbaseTxSize = 8 * 1024
 
 	// maxMinerAddressLen is the maximum allowed miner address length.
 	// Bech32m addresses are at most ~90 characters.

@@ -9,7 +9,8 @@ import (
 
 const (
 	// maxP2PCoinbaseTxSize is the maximum coinbase tx size accepted from P2P peers.
-	maxP2PCoinbaseTxSize = 100 * 1024 // 100KB
+	// Mirrors sharechain.maxCoinbaseTxSize — keep these in lockstep.
+	maxP2PCoinbaseTxSize = 8 * 1024
 	// maxP2PMinerAddressLen is the maximum miner address length accepted from P2P peers.
 	maxP2PMinerAddressLen = 128
 	// maxShareRequestCount is the maximum number of shares a peer can request at once.

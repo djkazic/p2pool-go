@@ -2,6 +2,7 @@ package sharechain
 
 import (
 	"math/big"
+	"sort"
 	"time"
 
 	"github.com/djkazic/p2pool-go/internal/types"
@@ -18,6 +19,19 @@ const (
 	// MaxShareTarget is the easiest possible share target (highest allowed value).
 	// Uses regtest-style max target so CPU miners can produce shares.
 	maxShareTargetBits = 0x207fffff
+
+	// MTPDepth is the number of shares at each end of the window whose
+	// timestamps are reduced to a median before being used in the difficulty
+	// calculation. Matches Bitcoin Core's GetMedianTimePast depth.
+	//
+	// MaxTimeFuture allows a single share's timestamp to be up to 2h ahead
+	// of real time (bitcoind curtime drift + ntime rolling). If the newest
+	// timestamp drove actualTime directly, one attacker-controlled share at
+	// the window edge could swing the timing ratio enough to hit the 4x clamp
+	// every step and hold the chain at artificially-easy difficulty.
+	// Taking a median over the newest N samples means defeating it requires
+	// a majority of the window — i.e., majority hashrate — not a single share.
+	MTPDepth = 11
 )
 
 var (
@@ -85,14 +99,34 @@ func (dc *DifficultyCalculator) NextTarget(shares []*types.Share) *big.Int {
 		return util.CompactToTarget(util.TargetToCompact(currentTarget))
 	}
 
-	oldest := window[len(window)-1]
+	// Use median-time-past at each window edge instead of single endpoints,
+	// so that no single share's timestamp can swing the timing ratio. The
+	// two groups must not overlap; cap n at len(window)/3 to keep a span
+	// of at least 1/3 of the window between them.
+	n := MTPDepth
+	if maxN := len(window) / 3; n > maxN {
+		n = maxN
+	}
+	if n < 1 {
+		n = 1
+	}
+	newestMedian := medianTimestamp(window[:n])
+	oldestMedian := medianTimestamp(window[len(window)-n:])
 
-	actualTime := int64(newest.Header.Timestamp) - int64(oldest.Header.Timestamp)
+	actualTime := int64(newestMedian) - int64(oldestMedian)
 	if actualTime <= 0 {
 		actualTime = 1
 	}
 
-	expectedTime := int64(dc.targetTime.Seconds()) * int64(len(window)-1)
+	// The timing span is between the two medians, so the expected time covers
+	// the (len(window) - n) inter-share intervals separating them. Using
+	// len(window)-1 would over-estimate the expected duration and bias the
+	// adjustment toward "too easy."
+	intervals := int64(len(window) - n)
+	if intervals < 1 {
+		intervals = 1
+	}
+	expectedTime := int64(dc.targetTime.Seconds()) * intervals
 	if expectedTime <= 0 {
 		expectedTime = 1
 	}
@@ -120,4 +154,15 @@ func (dc *DifficultyCalculator) NextTarget(shares []*types.Share) *big.Int {
 	// big.Int values regardless of whether a share was mined locally or
 	// received via P2P (where targets are transmitted as compact uint32).
 	return util.CompactToTarget(util.TargetToCompact(newTarget))
+}
+
+// medianTimestamp returns the median Header.Timestamp of shares.
+// Used to defang single-sample timestamp manipulation in NextTarget.
+func medianTimestamp(shares []*types.Share) uint32 {
+	times := make([]uint32, len(shares))
+	for i, s := range shares {
+		times[i] = s.Header.Timestamp
+	}
+	sort.Slice(times, func(i, j int) bool { return times[i] < times[j] })
+	return times[len(times)/2]
 }

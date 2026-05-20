@@ -570,6 +570,83 @@ func TestDifficultyCalculator_TooSlow(t *testing.T) {
 	}
 }
 
+func TestMedianTimestamp(t *testing.T) {
+	mk := func(ts uint32) *types.Share {
+		return &types.Share{Header: types.ShareHeader{Timestamp: ts}}
+	}
+
+	// Odd count: middle value.
+	if got := medianTimestamp([]*types.Share{mk(50), mk(10), mk(30), mk(20), mk(40)}); got != 30 {
+		t.Errorf("odd: got %d, want 30", got)
+	}
+
+	// Even count: upper-middle (times[len/2]) — deterministic, never averages.
+	if got := medianTimestamp([]*types.Share{mk(40), mk(10), mk(30), mk(20)}); got != 30 {
+		t.Errorf("even: got %d, want 30", got)
+	}
+
+	// Single element passes through.
+	if got := medianTimestamp([]*types.Share{mk(42)}); got != 42 {
+		t.Errorf("single: got %d, want 42", got)
+	}
+
+	// One outlier at the high end of an 8-sample window does not move the
+	// median: it sorts to position 7 while the median pulls from position 4.
+	shares := []*types.Share{mk(1_000_000), mk(70), mk(60), mk(50), mk(40), mk(30), mk(20), mk(10)}
+	if got := medianTimestamp(shares); got != 50 {
+		t.Errorf("outlier: got %d, want 50", got)
+	}
+}
+
+// TestDifficultyCalculator_FutureTimestampOutlier is the H3 regression.
+// Pre-fix, an attacker who controlled the newest share in the difficulty
+// window could set its Timestamp +2h ahead, driving actualTime/expectedTime
+// to ~11x and hitting the 4x easier-difficulty clamp every adjustment. The
+// median-time-past edges in NextTarget must absorb a single outlier so the
+// attacked target matches the honest target.
+func TestDifficultyCalculator_FutureTimestampOutlier(t *testing.T) {
+	dc := NewDifficultyCalculator(30 * time.Second)
+
+	const (
+		windowLen = 24
+		spacing   = 30
+		baseTime  = uint32(1700000000)
+	)
+	// Harder-than-max target so the calculator has headroom both directions.
+	currentTarget := new(big.Int).Div(MaxShareTarget, big.NewInt(16))
+
+	makeWindow := func(newestOverride uint32) []*types.Share {
+		shares := make([]*types.Share, windowLen)
+		for i := 0; i < windowLen; i++ {
+			ts := baseTime + uint32(windowLen-1-i)*spacing
+			if i == 0 && newestOverride != 0 {
+				ts = newestOverride
+			}
+			shares[i] = &types.Share{
+				Header:      types.ShareHeader{Timestamp: ts},
+				ShareTarget: currentTarget,
+			}
+		}
+		return shares
+	}
+
+	honestTarget := dc.NextTarget(makeWindow(0))
+
+	// +2h on the single newest sample — the precise attack pre-fix.
+	attackTarget := dc.NextTarget(makeWindow(baseTime + (windowLen-1)*spacing + 7200))
+
+	if attackTarget.Cmp(honestTarget) != 0 {
+		t.Errorf("MTP did not absorb +2h outlier: honest=%s attack=%s", honestTarget, attackTarget)
+	}
+
+	// Belt-and-suspenders: even allowing for some sensitivity, the attacker
+	// must not be able to drive the target to the 4x clamp.
+	fourX := new(big.Int).Mul(honestTarget, big.NewInt(4))
+	if attackTarget.Cmp(fourX) >= 0 {
+		t.Errorf("attack reached 4x clamp: honest=%s attack=%s", honestTarget, attackTarget)
+	}
+}
+
 // --- New validation tests ---
 
 func TestValidation_RejectsShareTargetMismatch(t *testing.T) {

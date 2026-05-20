@@ -103,7 +103,7 @@ func DefaultBootnodes(network string) []string {
 	case "mainnet":
 		return []string{
 			// pool.eldamar.icu — primary mainnet bootnode
-			"/dns4/pool.eldamar.icu/tcp/9171/p2p/12D3KooWAE5cgq3g5y5PttxWXiJVwuyzGzHHht7X6Xcz27hmQBiY",
+			"/dns4/pool.eldamar.icu/tcp/9171/p2p/12D3KooWQANcf3idikEnVF7cE5i6YGoHxSCRsuzkjWY2MZ2aKY4m",
 		}
 	default:
 		return nil

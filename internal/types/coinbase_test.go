@@ -53,6 +53,26 @@ func TestBech32AddressToScript(t *testing.T) {
 	}
 }
 
+// TestBech32AddressToScript_RejectsV0WithBech32mChecksum exercises
+// BIP-350 invalid vector: a P2WPKH (witness v0) payload whose checksum
+// uses the bech32m constant. Witness v0 must use bech32 strictly.
+func TestBech32AddressToScript_RejectsV0WithBech32mChecksum(t *testing.T) {
+	_, err := bech32AddressToScript("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kemeawh")
+	if err == nil {
+		t.Fatal("expected rejection for v0 address carrying a bech32m checksum")
+	}
+}
+
+// TestBech32AddressToScript_RejectsV1WithBech32Checksum exercises the
+// other BIP-350 invalid vector: a witness v1 (P2TR) payload whose
+// checksum uses the bech32 constant. Witness v1+ must use bech32m.
+func TestBech32AddressToScript_RejectsV1WithBech32Checksum(t *testing.T) {
+	_, err := bech32AddressToScript("bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqh2y7hd")
+	if err == nil {
+		t.Fatal("expected rejection for v1 address carrying a bech32 checksum")
+	}
+}
+
 func TestBuildCoinbase(t *testing.T) {
 	builder := NewCoinbaseBuilder("testnet3")
 

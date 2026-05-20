@@ -151,7 +151,9 @@ func serializeHeight(height int64) []byte {
 }
 
 // addressToScript converts a Bitcoin address to a scriptPubKey.
-// Supports P2WPKH (bech32), P2WSH (bech32), and basic P2PKH/P2SH.
+// Only bech32 / bech32m witness addresses are accepted: P2WPKH and
+// P2WSH (witness v0), P2TR (witness v1), and the generic shape for
+// v2–v16. Legacy P2PKH and P2SH base58 addresses are not supported.
 func addressToScript(address string, network string) ([]byte, error) {
 	// Handle bech32/bech32m addresses (testnet: tb1..., mainnet: bc1...)
 	prefix := "tb1"
@@ -168,10 +170,20 @@ func addressToScript(address string, network string) ([]byte, error) {
 	return nil, fmt.Errorf("unsupported address format: %s (only bech32 supported)", address)
 }
 
+// bech32Encoding identifies which checksum constant a bech32 string used.
+// Per BIP-350, witness v0 addresses must use bech32 and witness v1+ must
+// use bech32m; the two are not interchangeable.
+type bech32Encoding int
+
+const (
+	encodingBech32  bech32Encoding = iota // checksum constant 1 (BIP-173)
+	encodingBech32m                       // checksum constant 0x2bc830a3 (BIP-350)
+)
+
 // bech32AddressToScript converts a bech32 address to a witness scriptPubKey.
 // For simplicity, we decode the witness program directly.
 func bech32AddressToScript(address string) ([]byte, error) {
-	hrp, data, err := bech32Decode(address)
+	hrp, data, enc, err := bech32Decode(address)
 	if err != nil {
 		return nil, fmt.Errorf("bech32 decode: %w", err)
 	}
@@ -182,6 +194,20 @@ func bech32AddressToScript(address string) ([]byte, error) {
 	}
 
 	witnessVersion := data[0]
+	if witnessVersion > 16 {
+		return nil, fmt.Errorf("invalid witness version: %d", witnessVersion)
+	}
+
+	// BIP-350: v0 must use bech32, v1+ must use bech32m. Reject mismatches.
+	expectedEnc := encodingBech32m
+	if witnessVersion == 0 {
+		expectedEnc = encodingBech32
+	}
+	if enc != expectedEnc {
+		return nil, fmt.Errorf("witness version %d requires %s checksum, got %s",
+			witnessVersion, expectedEnc, enc)
+	}
+
 	witnessProgram, err := convertBits(data[1:], 5, 8, false)
 	if err != nil {
 		return nil, fmt.Errorf("convert bits: %w", err)
@@ -200,8 +226,22 @@ func bech32AddressToScript(address string) ([]byte, error) {
 	return script, nil
 }
 
-// bech32Decode decodes a bech32/bech32m string with full checksum verification.
-func bech32Decode(s string) (string, []byte, error) {
+// String makes bech32Encoding format readably in error messages.
+func (e bech32Encoding) String() string {
+	switch e {
+	case encodingBech32:
+		return "bech32"
+	case encodingBech32m:
+		return "bech32m"
+	default:
+		return "unknown"
+	}
+}
+
+// bech32Decode decodes a bech32/bech32m string with full checksum
+// verification, returning the HRP, the 5-bit data payload (without
+// checksum bytes), and which encoding the checksum matched.
+func bech32Decode(s string) (string, []byte, bech32Encoding, error) {
 	// Find separator (last occurrence of '1')
 	sepIdx := -1
 	for i := len(s) - 1; i >= 0; i-- {
@@ -211,7 +251,7 @@ func bech32Decode(s string) (string, []byte, error) {
 		}
 	}
 	if sepIdx < 1 || sepIdx+7 > len(s) {
-		return "", nil, fmt.Errorf("invalid bech32 separator position")
+		return "", nil, 0, fmt.Errorf("invalid bech32 separator position")
 	}
 
 	hrp := s[:sepIdx]
@@ -231,25 +271,29 @@ func bech32Decode(s string) (string, []byte, error) {
 		}
 		val, ok := charMap[c]
 		if !ok {
-			return "", nil, fmt.Errorf("invalid bech32 character: %c", c)
+			return "", nil, 0, fmt.Errorf("invalid bech32 character: %c", c)
 		}
 		data[i] = val
 	}
 
 	if len(data) < 6 {
-		return "", nil, fmt.Errorf("bech32 data too short")
+		return "", nil, 0, fmt.Errorf("bech32 data too short")
 	}
 
-	// Verify checksum
-	check := bech32Polymod(bech32HRPExpand(hrp), data)
-	if check != 1 && check != 0x2bc830a3 {
-		return "", nil, fmt.Errorf("invalid bech32 checksum")
+	var enc bech32Encoding
+	switch bech32Polymod(bech32HRPExpand(hrp), data) {
+	case 1:
+		enc = encodingBech32
+	case 0x2bc830a3:
+		enc = encodingBech32m
+	default:
+		return "", nil, 0, fmt.Errorf("invalid bech32 checksum")
 	}
 
 	// Strip checksum (last 6 characters)
 	data = data[:len(data)-6]
 
-	return hrp, data, nil
+	return hrp, data, enc, nil
 }
 
 // bech32Polymod computes the bech32 polynomial checksum over the HRP expansion and data.

@@ -80,6 +80,13 @@ func (c *Config) Validate() error {
 	if c.ShareTargetTime < time.Second {
 		return fmt.Errorf("share-target-time must be at least 1s")
 	}
+	// Practical share target times are 10–60s. Anything above an hour is
+	// almost certainly a unit typo (minutes confused with hours, etc.) and
+	// would make sharechain difficulty math run on a window that takes days
+	// to fill. Reject it at config load rather than silently misbehave.
+	if c.ShareTargetTime > time.Hour {
+		return fmt.Errorf("share-target-time must be at most 1h (got %v) — check units", c.ShareTargetTime)
+	}
 	if c.PPLNSWindowSize < 1 {
 		return fmt.Errorf("pplns-window-size must be at least 1")
 	}

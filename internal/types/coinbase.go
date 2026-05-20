@@ -14,6 +14,11 @@ const (
 
 	// SharechainCommitmentTag is the tag for sharechain data in the coinbase.
 	SharechainCommitmentTag = "p2pool"
+
+	// maxCoinbaseOutputs caps the declared output count before allocation.
+	// Real coinbases have 1–3 outputs; 1024 is ~100× any realistic value
+	// and prevents a peer-controlled varint from triggering an OOM via make.
+	maxCoinbaseOutputs = 1024
 )
 
 // CoinbaseBuilder builds coinbase transactions for shares.
@@ -449,6 +454,10 @@ func ParseCoinbaseOutputs(coinbaseTx []byte) ([]CoinbaseOutput, error) {
 		return nil, fmt.Errorf("read output count: %w", err)
 	}
 	pos += n
+
+	if outputCount > maxCoinbaseOutputs {
+		return nil, fmt.Errorf("output count too large: %d (max %d)", outputCount, maxCoinbaseOutputs)
+	}
 
 	outputs := make([]CoinbaseOutput, 0, outputCount)
 	for i := uint64(0); i < outputCount; i++ {

@@ -194,6 +194,32 @@ func TestParseCoinbaseOutputs_Malformed(t *testing.T) {
 	}
 }
 
+// TestParseCoinbaseOutputs_HugeOutputCount is the regression test for the
+// unbounded `make([]CoinbaseOutput, 0, outputCount)` OOM. A peer-controlled
+// varint declaring 2^32-1 outputs previously crashed the node before the
+// loop's per-output bounds checks ran. After the fix, parsing must return
+// a validation error without panicking or allocating.
+func TestParseCoinbaseOutputs_HugeOutputCount(t *testing.T) {
+	// Minimal coinbase with output count = 0xffffffff (varint 0xfe + 4 LE bytes).
+	tx := []byte{
+		0x01, 0x00, 0x00, 0x00, // version
+		0x01,                                                                                           // input count = 1
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // prev hash
+		0, 0, 0, 0, // prev index
+		0x00,                   // scriptSig length = 0
+		0xff, 0xff, 0xff, 0xff, // sequence
+		0xfe, 0xff, 0xff, 0xff, 0xff, // output count varint = 0xffffffff
+	}
+
+	_, err := ParseCoinbaseOutputs(tx)
+	if err == nil {
+		t.Fatal("expected error for huge output count, got nil")
+	}
+	if !bytes.Contains([]byte(err.Error()), []byte("output count too large")) {
+		t.Errorf("error %q does not mention output count cap", err.Error())
+	}
+}
+
 func TestValidateMinerInOutputs(t *testing.T) {
 	minerAddr := "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx"
 	tx := buildTestCoinbase(t, [32]byte{}, minerAddr)

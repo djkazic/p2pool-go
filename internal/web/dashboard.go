@@ -16,7 +16,7 @@ h1{font-size:1.5rem;font-weight:600;color:#33ff33;margin-bottom:4px;text-shadow:
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px}
 .card{background:#0a120a;border:1px solid #0f2a0f;border-radius:8px;padding:20px}
 .card .label{color:#1a9a1a;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px}
-.card .value{font-size:1.35rem;font-weight:700;color:#33ff33;font-family:"SF Mono",SFMono-Regular,Consolas,"Liberation Mono",Menlo,monospace;text-shadow:0 0 8px rgba(51,255,51,0.4),0 0 20px rgba(51,255,51,0.15)}
+.card .value{font-size:1rem;font-weight:700;color:#33ff33;font-family:"SF Mono",SFMono-Regular,Consolas,"Liberation Mono",Menlo,monospace;text-shadow:0 0 8px rgba(51,255,51,0.4),0 0 20px rgba(51,255,51,0.15)}
 .card .value.accent{color:#33ff33}
 .section{margin-bottom:24px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}

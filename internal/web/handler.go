@@ -25,6 +25,7 @@ type StatusData struct {
 	TipMiner        string             `json:"tip_miner"`
 	TipTime         int64              `json:"tip_time"`
 	RecentShares    []ShareInfo        `json:"recent_shares"`
+	BestShare       *BestShareInfo     `json:"best_share,omitempty"`
 	MinerWeights    map[string]float64 `json:"miner_weights"`
 	Network         string             `json:"network"`
 	StratumPort     int                `json:"stratum_port"`
@@ -60,6 +61,15 @@ type ShareInfo struct {
 	Miner     string `json:"miner"`
 	Timestamp int64  `json:"timestamp"`
 	IsBlock   bool   `json:"is_block"`
+}
+
+// BestShareInfo describes the highest-difficulty share in the PPLNS window.
+type BestShareInfo struct {
+	Hash       string  `json:"hash"`
+	Miner      string  `json:"miner"`
+	Timestamp  int64   `json:"timestamp"`
+	Difficulty float64 `json:"difficulty"`
+	IsBlock    bool    `json:"is_block"`
 }
 
 // TreeShare describes a share for the sharechain tree visualization.

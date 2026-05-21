@@ -102,6 +102,7 @@ body::after{content:"";position:fixed;top:0;left:0;width:100%;height:100%;backgr
   <div class="card"><div class="label">Miners | Peers</div><div class="value" id="miners-peers">-</div></div>
   <div class="card"><div class="label">Shares</div><div class="value" id="shares">-</div></div>
   <div class="card"><div class="label">Difficulty</div><div class="value" id="difficulty">-</div></div>
+  <div class="card"><div class="label">Best Share (window)</div><div class="value" id="best-share">-</div></div>
   <div class="card"><div class="label">Est. Time to Block</div><div class="value" id="ttb">-</div></div>
   <div class="card"><div class="label">Last Block Found</div><div class="value" id="last-block">-</div></div>
 </div>
@@ -1035,6 +1036,18 @@ function update(data){
   document.getElementById("shares").textContent=data.share_count;
   document.getElementById("miners-peers").textContent=data.miner_count+" | "+data.peer_count;
   document.getElementById("difficulty").textContent=fmtDiff(data.difficulty);
+  var bs=document.getElementById("best-share");
+  if(data.best_share){
+    bs.textContent=fmtDiff(data.best_share.difficulty);
+    bs.title=data.best_share.hash+"\nminer: "+data.best_share.miner+"\n"+timeAgo(data.best_share.timestamp);
+    bs.style.cursor="pointer";
+    bs.onclick=(function(h){return function(){openShareDetail(h);};})(data.best_share.hash);
+  }else{
+    bs.textContent="-";
+    bs.title="";
+    bs.onclick=null;
+    bs.style.cursor="";
+  }
   document.getElementById("pool-hashrate").textContent=fmtHash(data.pool_hashrate);
   document.getElementById("local-hashrate").textContent=fmtHash(data.local_hashrate);
   document.getElementById("ttb").textContent=fmtDuration(data.est_time_to_block);

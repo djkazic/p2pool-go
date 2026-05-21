@@ -1240,6 +1240,24 @@ func (n *Node) dashboardData() *web.StatusData {
 	poolHashrate := poolHashrateFromShares(pplnsAncestors)
 	shareCount := n.chain.Count()
 
+	// Highest-difficulty share inside the PPLNS window.
+	var bestShare *web.BestShareInfo
+	for _, s := range pplnsAncestors {
+		if s.ShareTarget == nil || s.ShareTarget.Sign() <= 0 {
+			continue
+		}
+		diff := util.TargetToDifficulty(s.ShareTarget, sharechain.MinShareTarget)
+		if bestShare == nil || diff > bestShare.Difficulty {
+			bestShare = &web.BestShareInfo{
+				Hash:       s.HashHex(),
+				Miner:      s.MinerAddress,
+				Timestamp:  shareDisplayTime(s),
+				Difficulty: diff,
+				IsBlock:    s.IsBlock(),
+			}
+		}
+	}
+
 	// Record a graph history point on each dashboard poll
 	localHR := n.localHashrate()
 	n.recordGraphPoint(poolHashrate, localHR)
@@ -1334,6 +1352,7 @@ func (n *Node) dashboardData() *web.StatusData {
 		TipMiner:           tipMiner,
 		TipTime:            tipTime,
 		RecentShares:       recentShares,
+		BestShare:          bestShare,
 		MinerWeights:       minerWeights,
 		Network:            n.config.BitcoinNetwork,
 		StratumPort:        n.config.StratumPort,

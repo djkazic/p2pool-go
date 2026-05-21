@@ -16,7 +16,7 @@ h1{font-size:1.5rem;font-weight:600;color:#33ff33;margin-bottom:4px;text-shadow:
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px}
 .card{background:#0a120a;border:1px solid #0f2a0f;border-radius:8px;padding:20px}
 .card .label{color:#1a9a1a;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px}
-.card .value{font-size:1.75rem;font-weight:700;color:#33ff33;font-family:"SF Mono",SFMono-Regular,Consolas,"Liberation Mono",Menlo,monospace;text-shadow:0 0 8px rgba(51,255,51,0.4),0 0 20px rgba(51,255,51,0.15)}
+.card .value{font-size:1.35rem;font-weight:700;color:#33ff33;font-family:"SF Mono",SFMono-Regular,Consolas,"Liberation Mono",Menlo,monospace;text-shadow:0 0 8px rgba(51,255,51,0.4),0 0 20px rgba(51,255,51,0.15)}
 .card .value.accent{color:#33ff33}
 .section{margin-bottom:24px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
@@ -101,8 +101,7 @@ body::after{content:"";position:fixed;top:0;left:0;width:100%;height:100%;backgr
   <div class="card"><div class="label">Local Hashrate</div><div class="value" id="local-hashrate">-</div></div>
   <div class="card"><div class="label">Miners | Peers</div><div class="value" id="miners-peers">-</div></div>
   <div class="card"><div class="label">Shares</div><div class="value" id="shares">-</div></div>
-  <div class="card"><div class="label">Difficulty</div><div class="value" id="difficulty">-</div></div>
-  <div class="card"><div class="label">Best Share (window)</div><div class="value" id="best-share">-</div></div>
+  <div class="card"><div class="label">Difficulty (now | best)</div><div class="value" id="difficulty">-</div></div>
   <div class="card"><div class="label">Est. Time to Block</div><div class="value" id="ttb">-</div></div>
   <div class="card"><div class="label">Last Block Found</div><div class="value" id="last-block">-</div></div>
 </div>
@@ -1035,18 +1034,17 @@ function update(data){
   _prevTip=data.tip_hash||"";
   document.getElementById("shares").textContent=data.share_count;
   document.getElementById("miners-peers").textContent=data.miner_count+" | "+data.peer_count;
-  document.getElementById("difficulty").textContent=fmtDiff(data.difficulty);
-  var bs=document.getElementById("best-share");
+  var diffEl=document.getElementById("difficulty");
   if(data.best_share){
-    bs.textContent=fmtDiff(data.best_share.difficulty);
-    bs.title=data.best_share.hash+"\nminer: "+data.best_share.miner+"\n"+timeAgo(data.best_share.timestamp);
-    bs.style.cursor="pointer";
-    bs.onclick=(function(h){return function(){openShareDetail(h);};})(data.best_share.hash);
+    diffEl.textContent=fmtDiff(data.difficulty)+" | "+fmtDiff(data.best_share.difficulty);
+    diffEl.title="best share: "+data.best_share.hash+"\nminer: "+data.best_share.miner+"\n"+timeAgo(data.best_share.timestamp);
+    diffEl.style.cursor="pointer";
+    diffEl.onclick=(function(h){return function(){openShareDetail(h);};})(data.best_share.hash);
   }else{
-    bs.textContent="-";
-    bs.title="";
-    bs.onclick=null;
-    bs.style.cursor="";
+    diffEl.textContent=fmtDiff(data.difficulty);
+    diffEl.title="";
+    diffEl.onclick=null;
+    diffEl.style.cursor="";
   }
   document.getElementById("pool-hashrate").textContent=fmtHash(data.pool_hashrate);
   document.getElementById("local-hashrate").textContent=fmtHash(data.local_hashrate);

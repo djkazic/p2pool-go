@@ -1240,13 +1240,14 @@ func (n *Node) dashboardData() *web.StatusData {
 	poolHashrate := poolHashrateFromShares(pplnsAncestors)
 	shareCount := n.chain.Count()
 
-	// Highest-difficulty share inside the PPLNS window.
+	// Highest-difficulty share inside the PPLNS window. Ranked by the work the
+	// hash actually achieved, not the target it was mined against — the latter
+	// is the same for every share at a given chain difficulty, so it would never
+	// surface a lucky share.
 	var bestShare *web.BestShareInfo
 	for _, s := range pplnsAncestors {
-		if s.ShareTarget == nil || s.ShareTarget.Sign() <= 0 {
-			continue
-		}
-		diff := util.TargetToDifficulty(s.ShareTarget, sharechain.MinShareTarget)
+		hash := s.Hash()
+		diff := util.HashToDifficulty(hash, sharechain.MinShareTarget)
 		if bestShare == nil || diff > bestShare.Difficulty {
 			bestShare = &web.BestShareInfo{
 				Hash:       s.HashHex(),
@@ -1392,20 +1393,23 @@ func (n *Node) lookupShare(hashHex string) *web.ShareDetail {
 		diff := util.TargetToDifficulty(share.ShareTarget, sharechain.MinShareTarget)
 		diffStr = fmt.Sprintf("%.2f", diff)
 	}
+	shareHash := share.Hash()
+	achievedStr := fmt.Sprintf("%.2f", util.HashToDifficulty(shareHash, sharechain.MinShareTarget))
 
 	return &web.ShareDetail{
-		Hash:          share.HashHex(),
-		Miner:         share.MinerAddress,
-		Timestamp:     shareDisplayTime(share),
-		IsBlock:       share.IsBlock(),
-		Version:       share.Header.Version,
-		PrevBlockHash: util.HashToHex(share.Header.PrevBlockHash),
-		MerkleRoot:    util.HashToHex(share.Header.MerkleRoot),
-		Bits:          share.Header.Bits,
-		Nonce:         share.Header.Nonce,
-		PrevShareHash: share.PrevShareHashHex(),
-		ShareVersion:  share.ShareVersion,
-		Difficulty:    diffStr,
+		Hash:               share.HashHex(),
+		Miner:              share.MinerAddress,
+		Timestamp:          shareDisplayTime(share),
+		IsBlock:            share.IsBlock(),
+		Version:            share.Header.Version,
+		PrevBlockHash:      util.HashToHex(share.Header.PrevBlockHash),
+		MerkleRoot:         util.HashToHex(share.Header.MerkleRoot),
+		Bits:               share.Header.Bits,
+		Nonce:              share.Header.Nonce,
+		PrevShareHash:      share.PrevShareHashHex(),
+		ShareVersion:       share.ShareVersion,
+		Difficulty:         diffStr,
+		AchievedDifficulty: achievedStr,
 	}
 }
 

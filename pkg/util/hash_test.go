@@ -97,6 +97,30 @@ func TestTargetToDifficulty(t *testing.T) {
 	}
 }
 
+func TestHashToDifficulty(t *testing.T) {
+	maxTarget := CompactToTarget(0x1d00ffff)
+
+	// A real block hash mined on a fork, display order (big-endian hex).
+	// bdiff = 0x00000000FFFF...0000 / hash = 741.1231670966...
+	blockHash, err := HexToHash("0000000000586d357e854e2abd1fa1d41d9552f290881f4647c58c2d0b88dec9")
+	if err != nil {
+		t.Fatalf("HexToHash: %v", err)
+	}
+
+	diff := HashToDifficulty(blockHash, maxTarget)
+	if diff < 741.12 || diff > 741.13 {
+		t.Errorf("HashToDifficulty = %f, want ~741.123", diff)
+	}
+
+	// The max target itself, as a hash, is exactly difficulty 1.
+	var maxHash [32]byte
+	copy(maxHash[32-len(maxTarget.Bytes()):], maxTarget.Bytes())
+	copy(maxHash[:], ReverseBytes(maxHash[:]))
+	if d := HashToDifficulty(maxHash, maxTarget); d != 1.0 {
+		t.Errorf("HashToDifficulty(maxTarget) = %f, want 1.0", d)
+	}
+}
+
 func TestDifficultyToTarget(t *testing.T) {
 	maxTarget := CompactToTarget(0x1d00ffff)
 	target := DifficultyToTarget(1.0, maxTarget)

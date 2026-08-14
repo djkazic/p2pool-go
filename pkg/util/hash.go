@@ -124,6 +124,17 @@ func DifficultyToTarget(difficulty float64, maxTarget *big.Int) *big.Int {
 	return target
 }
 
+// HashToDifficulty converts a hash (as little-endian 32 bytes) to the
+// difficulty it actually achieved, relative to the given max target.
+// This is the work the hash represents, not the difficulty it was mined at.
+func HashToDifficulty(hash [32]byte, maxTarget *big.Int) float64 {
+	hashInt := new(big.Int).SetBytes(ReverseBytes(hash[:]))
+	if hashInt.Sign() == 0 {
+		return 0
+	}
+	return TargetToDifficulty(hashInt, maxTarget)
+}
+
 // HashMeetsTarget checks if a hash (as little-endian 32 bytes) is <= target.
 func HashMeetsTarget(hash [32]byte, target *big.Int) bool {
 	// Bitcoin block hashes are compared as little-endian 256-bit integers.

@@ -119,7 +119,10 @@ type ShareDetail struct {
 	Nonce         uint32 `json:"nonce"`
 	PrevShareHash string `json:"prev_share_hash"`
 	ShareVersion  uint32 `json:"share_version"`
-	Difficulty    string `json:"difficulty"`
+	// Difficulty is the target the share was mined against (its PPLNS weight).
+	Difficulty string `json:"difficulty"`
+	// AchievedDifficulty is the work the share's hash actually represents.
+	AchievedDifficulty string `json:"achieved_difficulty"`
 }
 
 // ShareLookupFunc looks up a share by display-order hex hash.

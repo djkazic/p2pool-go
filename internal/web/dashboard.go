@@ -101,7 +101,7 @@ body::after{content:"";position:fixed;top:0;left:0;width:100%;height:100%;backgr
   <div class="card"><div class="label">Local Hashrate</div><div class="value" id="local-hashrate">-</div></div>
   <div class="card"><div class="label">Miners | Peers</div><div class="value" id="miners-peers">-</div></div>
   <div class="card"><div class="label">Shares</div><div class="value" id="shares">-</div></div>
-  <div class="card"><div class="label">Difficulty (now | best)</div><div class="value" id="difficulty">-</div></div>
+  <div class="card"><div class="label">Difficulty (now | best share)</div><div class="value" id="difficulty">-</div></div>
   <div class="card"><div class="label">Est. Time to Block</div><div class="value" id="ttb">-</div></div>
   <div class="card"><div class="label">Last Block Found</div><div class="value" id="last-block">-</div></div>
 </div>
@@ -658,7 +658,8 @@ function openShareDetail(hash){
         '<dt>Nonce</dt><dd>'+d.nonce+'</dd>'+
         '<dt>Prev Share Hash</dt><dd>'+esc(d.prev_share_hash)+'</dd>'+
         '<dt>Share Version</dt><dd>'+d.share_version+'</dd>'+
-        '<dt>Difficulty</dt><dd>'+esc(d.difficulty)+'</dd>'+
+        '<dt>Share Difficulty</dt><dd>'+esc(d.difficulty)+'</dd>'+
+        '<dt>Achieved Difficulty</dt><dd>'+esc(d.achieved_difficulty)+'</dd>'+
         '</dl>';
     })
     .catch(function(){content.innerHTML='<div class="no-data">Failed to load share details</div>';});
@@ -1037,7 +1038,12 @@ function update(data){
   var diffEl=document.getElementById("difficulty");
   if(data.best_share){
     diffEl.textContent=fmtDiff(data.difficulty)+" | "+fmtDiff(data.best_share.difficulty);
-    diffEl.title="best share: "+data.best_share.hash+"\nminer: "+data.best_share.miner+"\n"+timeAgo(data.best_share.timestamp);
+    diffEl.title="now: chain difficulty shares are mined against"+
+      "\n\nbest share: luckiest hash in the PPLNS window, by the work it actually achieved"+
+      "\ndifficulty: "+fmtDiff(data.best_share.difficulty)+
+      "\nhash: "+data.best_share.hash+
+      "\nminer: "+data.best_share.miner+
+      "\n"+timeAgo(data.best_share.timestamp);
     diffEl.style.cursor="pointer";
     diffEl.onclick=(function(h){return function(){openShareDetail(h);};})(data.best_share.hash);
   }else{

@@ -385,13 +385,19 @@ func (n *Node) handleSubmission(sub *stratum.ShareSubmission) {
 	// difficulty, so accept shares meeting either current or previous.
 	// Track which difficulty the share actually met for accurate hashrate.
 	acceptedDifficulty := sub.Difficulty
-	stratumTarget := stratumDiffToTarget(sub.Difficulty)
-	meetsTarget := util.HashMeetsTarget(headerHash, stratumTarget)
-	if !meetsTarget && sub.PrevDifficulty > 0 && sub.PrevDifficulty != sub.Difficulty {
-		prevTarget := stratumDiffToTarget(sub.PrevDifficulty)
-		if util.HashMeetsTarget(headerHash, prevTarget) {
+	meetsTarget := false
+	candidates := sub.GraceDifficulties
+	if len(candidates) == 0 {
+		candidates = []float64{sub.Difficulty}
+	}
+	for _, d := range candidates {
+		if d <= 0 {
+			continue
+		}
+		if util.HashMeetsTarget(headerHash, stratumDiffToTarget(d)) {
 			meetsTarget = true
-			acceptedDifficulty = sub.PrevDifficulty
+			acceptedDifficulty = d
+			break
 		}
 	}
 	if !meetsTarget {

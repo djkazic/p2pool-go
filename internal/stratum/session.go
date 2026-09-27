@@ -58,16 +58,19 @@ type Session struct {
 
 // ShareSubmission represents a share submitted by a miner.
 type ShareSubmission struct {
-	SessionID      string
-	WorkerName     string
-	JobID          string
-	Extranonce1    string // Hex-encoded, from the session
-	Extranonce2    string
-	NTime          string
-	Nonce          string
-	VersionBits    string  // BIP 310 version rolling bits (hex), empty if not used
-	Difficulty     float64 // Current stratum difficulty for this miner
-	PrevDifficulty float64 // Previous difficulty (before most recent retarget), 0 if none
+	SessionID   string
+	WorkerName  string
+	JobID       string
+	Extranonce1 string // Hex-encoded, from the session
+	Extranonce2 string
+	NTime       string
+	Nonce       string
+	VersionBits string  // BIP 310 version rolling bits (hex), empty if not used
+	Difficulty  float64 // Current stratum difficulty for this miner
+	// GraceDifficulties is every difficulty this share could legitimately have
+	// been found at: the current one plus any superseded within the grace
+	// window, newest first.
+	GraceDifficulties []float64
 }
 
 // NewSession creates a new miner session.
@@ -289,15 +292,15 @@ func (s *Session) handleSubmit(req *Request) error {
 	}
 
 	submission := &ShareSubmission{
-		SessionID:      s.ID,
-		WorkerName:     params[0],
-		JobID:          params[1],
-		Extranonce1:    s.Extranonce1,
-		Extranonce2:    params[2],
-		NTime:          params[3],
-		Nonce:          params[4],
-		Difficulty:     s.Vardiff.Difficulty(),
-		PrevDifficulty: s.Vardiff.PrevDifficulty(),
+		SessionID:         s.ID,
+		WorkerName:        params[0],
+		JobID:             params[1],
+		Extranonce1:       s.Extranonce1,
+		Extranonce2:       params[2],
+		NTime:             params[3],
+		Nonce:             params[4],
+		Difficulty:        s.Vardiff.Difficulty(),
+		GraceDifficulties: s.Vardiff.AcceptableDifficulties(),
 	}
 
 	// BIP 310: if version rolling is enabled, the 6th param is the rolled version bits

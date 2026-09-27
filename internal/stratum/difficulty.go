@@ -19,13 +19,35 @@ const (
 
 	// VardiffVariancePercent is the acceptable variance before adjustment.
 	VardiffVariancePercent = 25.0
+
+	// VardiffGraceWindow is how long a difficulty stays acceptable after it
+	// has been superseded. A miner that was told difficulty D keeps hashing
+	// at D until it receives and applies the next set_difficulty, so shares
+	// found at D can still arrive after the change.
+	VardiffGraceWindow = 60 * time.Second
+
+	// maxGraceDifficulties bounds the retained history.
+	maxGraceDifficulties = 8
 )
+
+// issuedDifficulty is a difficulty the miner was told, and when.
+type issuedDifficulty struct {
+	value float64
+	at    time.Time
+}
 
 // Vardiff manages per-miner variable difficulty.
 type Vardiff struct {
-	difficulty     float64
-	prevDifficulty float64 // previous difficulty, accepted during grace period after a change
-	targetTime     time.Duration
+	difficulty float64
+	targetTime time.Duration
+
+	// superseded holds difficulties this miner was told previously and which
+	// have not yet aged out, newest first. A single "previous" slot is not
+	// enough: RecordShare cannot retarget more often than VardiffRetargetTime,
+	// but SetDifficulty — reached from mining.suggest_difficulty with a
+	// miner-supplied value — has no minimum interval, so two changes can land
+	// back to back and strand shares that were already in flight.
+	superseded []issuedDifficulty
 
 	// Tracking
 	lastRetarget time.Time
@@ -41,6 +63,36 @@ func NewVardiff(initialDifficulty float64) *Vardiff {
 	}
 }
 
+// supersede records the outgoing difficulty as still-acceptable and drops any
+// entries that have aged past the grace window.
+func (v *Vardiff) supersede(old float64) {
+	now := time.Now()
+	kept := make([]issuedDifficulty, 0, len(v.superseded)+1)
+	if old > 0 {
+		kept = append(kept, issuedDifficulty{value: old, at: now})
+	}
+	for _, d := range v.superseded {
+		if now.Sub(d.at) < VardiffGraceWindow && len(kept) < maxGraceDifficulties {
+			kept = append(kept, d)
+		}
+	}
+	v.superseded = kept
+}
+
+// AcceptableDifficulties returns the current difficulty followed by every
+// superseded difficulty still inside the grace window, newest first. A share
+// meeting any of them represents work the miner was legitimately asked for.
+func (v *Vardiff) AcceptableDifficulties() []float64 {
+	now := time.Now()
+	out := []float64{v.difficulty}
+	for _, d := range v.superseded {
+		if now.Sub(d.at) < VardiffGraceWindow && d.value != v.difficulty {
+			out = append(out, d.value)
+		}
+	}
+	return out
+}
+
 // SetDifficulty sets the difficulty to the given value, clamped to
 // [VardiffMinDifficulty, VardiffMaxDifficulty]. It resets the retarget
 // timer and share count so vardiff doesn't immediately override.
@@ -51,7 +103,7 @@ func (v *Vardiff) SetDifficulty(diff float64) {
 	if diff > VardiffMaxDifficulty {
 		diff = VardiffMaxDifficulty
 	}
-	v.prevDifficulty = v.difficulty
+	v.supersede(v.difficulty)
 	v.difficulty = diff
 	v.lastRetarget = time.Now()
 	v.shareCount = 0
@@ -62,10 +114,13 @@ func (v *Vardiff) Difficulty() float64 {
 	return v.difficulty
 }
 
-// PrevDifficulty returns the difficulty before the most recent retarget.
-// Returns 0 if no retarget has occurred.
+// PrevDifficulty returns the most recent superseded difficulty, or 0 if there
+// is none inside the grace window.
 func (v *Vardiff) PrevDifficulty() float64 {
-	return v.prevDifficulty
+	if acc := v.AcceptableDifficulties(); len(acc) > 1 {
+		return acc[1]
+	}
+	return 0
 }
 
 // RecordShare records a share submission and returns true if difficulty should change.
@@ -112,7 +167,7 @@ func (v *Vardiff) retarget(elapsed time.Duration) bool {
 		newDiff = VardiffMaxDifficulty
 	}
 
-	v.prevDifficulty = v.difficulty
+	v.supersede(v.difficulty)
 	v.difficulty = newDiff
 	v.lastRetarget = time.Now()
 	v.shareCount = 0

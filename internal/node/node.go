@@ -883,7 +883,7 @@ const maxGraphHistory = 60
 
 func (n *Node) logStatus() {
 	target := n.chain.GetExpectedTarget()
-	difficulty := util.TargetToDifficulty(target, sharechain.MinShareTarget)
+	difficulty := util.TargetToDifficulty(target, sharechain.DifficultyOneTarget)
 
 	shareCount := n.chain.Count()
 	minerCount := n.stratumSrv.SessionCount()
@@ -1181,7 +1181,7 @@ func (n *Node) buildTreeData() []web.TreeShare {
 // dashboardData collects all metrics for the web dashboard.
 func (n *Node) dashboardData() *web.StatusData {
 	target := n.chain.GetExpectedTarget()
-	difficulty := util.TargetToDifficulty(target, sharechain.MinShareTarget)
+	difficulty := util.TargetToDifficulty(target, sharechain.DifficultyOneTarget)
 
 	var tipHash, tipMiner string
 	var tipTime int64
@@ -1251,7 +1251,7 @@ func (n *Node) dashboardData() *web.StatusData {
 	var bestShare *web.BestShareInfo
 	for _, s := range pplnsAncestors {
 		hash := s.Hash()
-		diff := util.HashToDifficulty(hash, sharechain.MinShareTarget)
+		diff := util.HashToDifficulty(hash, sharechain.DifficultyOneTarget)
 		if bestShare == nil || diff > bestShare.Difficulty {
 			bestShare = &web.BestShareInfo{
 				Hash:       s.HashHex(),
@@ -1394,11 +1394,11 @@ func (n *Node) lookupShare(hashHex string) *web.ShareDetail {
 
 	var diffStr string
 	if share.ShareTarget != nil && share.ShareTarget.Sign() > 0 {
-		diff := util.TargetToDifficulty(share.ShareTarget, sharechain.MinShareTarget)
+		diff := util.TargetToDifficulty(share.ShareTarget, sharechain.DifficultyOneTarget)
 		diffStr = fmt.Sprintf("%.2f", diff)
 	}
 	shareHash := share.Hash()
-	achievedStr := fmt.Sprintf("%.2f", util.HashToDifficulty(shareHash, sharechain.MinShareTarget))
+	achievedStr := fmt.Sprintf("%.2f", util.HashToDifficulty(shareHash, sharechain.DifficultyOneTarget))
 
 	return &web.ShareDetail{
 		Hash:               share.HashHex(),

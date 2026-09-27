@@ -7,6 +7,17 @@ import (
 	"github.com/djkazic/p2pool-go/internal/types"
 )
 
+// sortedAddresses returns the payout addresses in lexicographic order, so
+// that every pass over the map is deterministic.
+func sortedAddresses(payouts map[string]int64) []string {
+	out := make([]string, 0, len(payouts))
+	for addr := range payouts {
+		out = append(out, addr)
+	}
+	sort.Strings(out)
+	return out
+}
+
 // Calculator computes PPLNS payouts.
 type Calculator struct {
 	finderFeePercent  float64
@@ -115,6 +126,50 @@ func (c *Calculator) CalculatePayouts(window *Window, totalReward int64, finderA
 				}
 			}
 		}
+	}
+
+	// Final standardness pass. Two outputs can still sit below the dust
+	// threshold after the sweep above: the finder, who is deliberately exempt
+	// from it, and every output at once when consolidation was skipped because
+	// they were all dust. Either makes the coinbase non-standard, so the block
+	// would not relay and the whole reward would be lost.
+	//
+	// Fold each remaining dust output into the largest other one. Nothing is
+	// discarded — the total is unchanged, only the recipient moves — and each
+	// pass removes one entry, so this terminates. If a single output is left
+	// and it is still below the threshold, the reward itself is smaller than
+	// the dust limit and there is nothing better to do.
+	for len(payouts) > 1 {
+		ordered := sortedAddresses(payouts)
+
+		smallest, haveSmall := "", false
+		for _, addr := range ordered {
+			if payouts[addr] >= c.dustThresholdSats {
+				continue
+			}
+			if !haveSmall || payouts[addr] < payouts[smallest] {
+				smallest, haveSmall = addr, true
+			}
+		}
+		if !haveSmall {
+			break
+		}
+
+		largest, haveLarge := "", false
+		for _, addr := range ordered {
+			if addr == smallest {
+				continue
+			}
+			if !haveLarge || payouts[addr] > payouts[largest] {
+				largest, haveLarge = addr, true
+			}
+		}
+		if !haveLarge {
+			break
+		}
+
+		payouts[largest] += payouts[smallest]
+		delete(payouts, smallest)
 	}
 
 	// Build sorted result

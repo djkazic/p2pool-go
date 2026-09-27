@@ -259,13 +259,13 @@ func (s *BoltStore) Close() error {
 // gobShare is the serialization form for Share. It mirrors types.Share but
 // stores ShareTarget as bytes to avoid gob's issues with nil *big.Int.
 type gobShare struct {
-	Header          types.ShareHeader
-	ShareVersion    uint32
-	PrevShareHash   [32]byte
+	Header           types.ShareHeader
+	ShareVersion     uint32
+	PrevShareHash    [32]byte
 	ShareTargetBytes []byte
-	MinerAddress    string
-	CoinbaseTx      []byte
-	ShareChainNonce uint64
+	MinerAddress     string
+	CoinbaseTx       []byte
+	ShareChainNonce  uint64
 }
 
 func encodeShare(s *types.Share) ([]byte, error) {

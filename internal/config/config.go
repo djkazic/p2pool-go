@@ -15,8 +15,8 @@ type Config struct {
 	BitcoinNetwork     string `mapstructure:"bitcoin-network"`
 
 	// Stratum server
-	StratumPort      int     `mapstructure:"stratum-port"`
-	StartDifficulty  float64 `mapstructure:"start-difficulty"`
+	StratumPort     int     `mapstructure:"stratum-port"`
+	StartDifficulty float64 `mapstructure:"start-difficulty"`
 
 	// P2P
 	P2PPort      int      `mapstructure:"p2p-port"`

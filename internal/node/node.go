@@ -101,7 +101,7 @@ func NewNode(cfg *config.Config, minerAddress string, logger *zap.Logger) *Node 
 // peerScore tracks a peer's track record of delivering valid shares.
 // Bad shares are counted only when ValidationCategory == Provable.
 type peerScore struct {
-	good, bad int
+	good, bad    int
 	disconnected bool
 }
 
@@ -110,8 +110,8 @@ type peerScore struct {
 //   - bad / (good+bad) > peerScoreBadRatio (ratio gate — a peer that's
 //     overwhelmingly delivering junk, not someone racing during sync).
 const (
-	peerScoreMinBad    = 5
-	peerScoreBadRatio  = 0.2 // 20%
+	peerScoreMinBad   = 5
+	peerScoreBadRatio = 0.2 // 20%
 )
 
 // recordPeerOutcome bumps the peer's counters and returns true if the
@@ -1676,7 +1676,6 @@ func (n *Node) submitBlock(header []byte, coinbase []byte, tmpl *bitcoin.BlockTe
 		}
 	}
 }
-
 
 // shareDisplayTime returns the share's ReceivedAt time for display, falling
 // back to the header timestamp for shares that predate ReceivedAt tracking.

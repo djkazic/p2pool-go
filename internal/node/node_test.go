@@ -207,9 +207,9 @@ func TestHandleInvRequest_MultipleLocators(t *testing.T) {
 
 	// Send [unknown, shares[7], shares[3]] — should match shares[7] first
 	locators := [][32]byte{
-		{0xaa, 0xbb},      // unknown
-		shares[7].Hash(),   // match this one
-		shares[3].Hash(),   // ignored (first match wins)
+		{0xaa, 0xbb},     // unknown
+		shares[7].Hash(), // match this one
+		shares[3].Hash(), // ignored (first match wins)
 	}
 	resp := n.handleInvRequest(&p2p.InvReq{
 		Type:     p2p.MsgTypeInvReq,

@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -306,7 +307,7 @@ func (n *Node) eventLoop(ctx context.Context) {
 			if pruned := n.chain.PruneOrphans(); pruned > 0 {
 				n.logger.Info("pruned orphan shares", zap.Int("count", pruned))
 			}
-			n.chain.PruneOldShares(n.config.PPLNSWindowSize)
+			n.chain.PruneOldShares(sharechain.PruneKeep(n.config.PPLNSWindowSize))
 		}
 	}
 }
@@ -744,11 +745,33 @@ func (n *Node) syncFromAllPeers(ctx context.Context) {
 			}
 		}
 
-		// Merge and deduplicate: collect all unique hashes we don't already have
+		// Merge and deduplicate: collect all unique hashes we don't already
+		// have, keeping the result oldest-first.
+		//
+		// Each peer serves its main chain oldest-first from our fork point, so
+		// the longest inventory is the one reaching furthest back. Taking
+		// peers in descending inventory length keeps the merged list
+		// oldest-first; ranging over the map directly would interleave them in
+		// Go's randomized order. The order matters because shares must be
+		// added parent-first, and on an empty store the first share added
+		// becomes the chain root — rooting mid-chain would strand everything
+		// below it.
+		ordered := make([]peer.ID, 0, len(peerHashes))
+		for pid := range peerHashes {
+			ordered = append(ordered, pid)
+		}
+		sort.Slice(ordered, func(i, j int) bool {
+			li, lj := len(peerHashes[ordered[i]]), len(peerHashes[ordered[j]])
+			if li != lj {
+				return li > lj
+			}
+			return ordered[i] < ordered[j]
+		})
+
 		seen := make(map[[32]byte]bool)
 		var needed [][32]byte
-		for _, hashes := range peerHashes {
-			for _, h := range hashes {
+		for _, pid := range ordered {
+			for _, h := range peerHashes[pid] {
 				if seen[h] {
 					continue
 				}
@@ -831,13 +854,27 @@ func (n *Node) syncFromAllPeers(ctx context.Context) {
 			peerDownloaded[r.peerID] = len(r.shares)
 		}
 
-		// Add shares in chain order (oldest-first) to satisfy parent deps
+		// Add shares in chain order (oldest-first) to satisfy parent deps.
+		//
+		// The oldest share of the batch goes in via AddShareAsRoot: peers serve
+		// a pruned chain, so its parent may be one nobody still has, and without
+		// somewhere to anchor it every share behind it cascades into
+		// "parent not found". Only the oldest gets that treatment, so a gap
+		// later in the batch is still rejected rather than rooted.
+		rootPending := true
 		for _, h := range needed {
 			share, ok := shareByHash[h]
 			if !ok {
 				continue
 			}
-			if err := n.chain.AddShareQuiet(share); err != nil {
+			var err error
+			if rootPending {
+				err = n.chain.AddShareAsRoot(share)
+				rootPending = false
+			} else {
+				err = n.chain.AddShareQuiet(share)
+			}
+			if err != nil {
 				n.logger.Debug("sync: rejected share", zap.Error(err))
 				continue
 			}

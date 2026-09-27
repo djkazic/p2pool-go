@@ -66,6 +66,39 @@ type Validator struct {
 	targetFunc     func(parentHash [32]byte) *big.Int
 	network        string
 	skipTimeChecks bool // set during ValidateLoaded replay
+	allowRoot      bool // set by AddShareAsRoot when anchoring a synced chain
+}
+
+// historyIsComplete reports whether this node can see depth shares of ancestry
+// behind parentHash — the history a consensus rule needs before it can be
+// applied. Called with DifficultyAdjustmentWindow for the target check and
+// with the PPLNS window size for the payout check.
+//
+// It returns true when the walk reaches the zero hash inside the window — a
+// young chain that every node sees identically — or when a full window of
+// ancestors is present. It returns false only when the walk runs into a share
+// this node no longer holds, i.e. its prune horizon.
+//
+// That distinction is what makes the consensus target agreeable. Nodes prune
+// at different points, so a node near its horizon sees fewer ancestors than
+// its peers and NextTarget would hand it a different answer for the very same
+// parent — a target mismatch it would then charge to the peer as provable
+// misbehavior. Where the history is incomplete we do not claim to know the
+// consensus target at all.
+func (v *Validator) historyIsComplete(parentHash [32]byte, depth int) bool {
+	var zeroHash [32]byte
+	current := parentHash
+	for i := 0; i < depth; i++ {
+		if current == zeroHash {
+			return true // reached the start of the chain within the window
+		}
+		share, ok := v.store.Get(current)
+		if !ok {
+			return false // prune horizon — peers may see further back
+		}
+		current = share.PrevShareHash
+	}
+	return true
 }
 
 // NewValidator creates a new share validator.
@@ -100,16 +133,26 @@ func (v *Validator) ValidateShare(share *types.Share) error {
 		return &ValidationError{Reason: fmt.Sprintf("invalid miner address: %v", err)}
 	}
 
-	// 3. Parent exists (unless genesis). The only Indeterminate case: an
-	// honest peer ahead of our sync would trip this, so do not penalize.
+	// 3. Parent exists (unless genesis, or unless this share is the root of a
+	// chain we are bootstrapping). The only Indeterminate case: an honest peer
+	// ahead of our sync would trip this, so do not penalize.
 	var zeroHash [32]byte
-	if share.PrevShareHash != zeroHash {
-		if !v.store.Has(share.PrevShareHash) {
+	isRoot := false
+	if share.PrevShareHash != zeroHash && !v.store.Has(share.PrevShareHash) {
+		if !v.allowRoot {
 			return &ValidationError{
 				Reason:   fmt.Sprintf("parent share %x not found", share.PrevShareHash[:8]),
 				Category: CategoryIndeterminate,
 			}
 		}
+		// Every node prunes to a bounded window, so a peer serving us its
+		// chain starts it at a share whose parent nobody has any more. Without
+		// somewhere to anchor, that first share is unaddable and the whole
+		// sync stalls — and once every peer has pruned, nobody can ever join
+		// the pool again. Accept it as the chain root. AddShareQuiet only sets
+		// allowRoot for an empty store on the sync path, so this happens at
+		// most once per node and never from gossip.
+		isRoot = true
 	}
 
 	// 4. Timestamp validation (skipped when replaying from disk)
@@ -117,13 +160,25 @@ func (v *Validator) ValidateShare(share *types.Share) error {
 		now := time.Now()
 		shareTime := share.Time()
 
-		// Not too far in the future
+		// Not too far in the future.
+		//
+		// Indeterminate, not provable: this compares against OUR clock. A peer
+		// whose clock runs ahead of ours applies the identical rule and accepts,
+		// so a rejection here says nothing about that peer's honesty. Share
+		// timestamps come from bitcoind's curtime, which as noted above already
+		// runs well ahead of real time, leaving little margin under the bound —
+		// charging this to the sender would let modest clock skew, or an
+		// attacker minting shares near the boundary, make honest nodes
+		// disconnect each other.
 		if shareTime.After(now.Add(MaxTimeFuture)) {
-			return &ValidationError{Reason: fmt.Sprintf("share timestamp %v is too far in the future", shareTime)}
+			return &ValidationError{
+				Reason:   fmt.Sprintf("share timestamp %v is too far in the future", shareTime),
+				Category: CategoryIndeterminate,
+			}
 		}
 
 		// Not too far behind parent
-		if share.PrevShareHash != zeroHash {
+		if share.PrevShareHash != zeroHash && !isRoot {
 			parent, ok := v.store.Get(share.PrevShareHash)
 			if ok {
 				parentTime := parent.Time()
@@ -134,20 +189,48 @@ func (v *Validator) ValidateShare(share *types.Share) error {
 		}
 	}
 
-	// 5. Expected target — compute via targetFunc from parent
-	expectedTarget := v.targetFunc(share.PrevShareHash)
+	// 5-7. Target checks.
+	//
+	// The consensus target is only well defined where we hold the history it
+	// is derived from. Inside our prune horizon every node computes the same
+	// value and the share must match it exactly. At the horizon — the oldest
+	// shares of a chain we bootstrapped, which other nodes may still see
+	// further back than we do — we cannot compute an agreeable value, so we
+	// fall back to checking the share against the target it declares, bounded
+	// to the protocol range. ValidateLoaded has always skipped these oldest
+	// shares for the same reason; this applies the same rule on the live path.
+	//
+	// The relaxation is confined to history: any share whose parent has a full
+	// window behind it, which is every share at the tip of a chain longer than
+	// the window, takes the strict path.
+	if !isRoot && v.historyIsComplete(share.PrevShareHash, DifficultyAdjustmentWindow) {
+		expectedTarget := v.targetFunc(share.PrevShareHash)
 
-	// 6. PoW check — share must meet the consensus-computed target
-	if !share.MeetsTarget(expectedTarget) {
-		return &ValidationError{Reason: "share does not meet required target"}
-	}
+		// PoW check — share must meet the consensus-computed target
+		if !share.MeetsTarget(expectedTarget) {
+			return &ValidationError{Reason: "share does not meet required target"}
+		}
 
-	// 7. ShareTarget consistency — declared target must match consensus
-	declaredBits := util.TargetToCompact(share.ShareTarget)
-	expectedBits := util.TargetToCompact(expectedTarget)
-	if declaredBits != expectedBits {
-		return &ValidationError{Reason: fmt.Sprintf(
-			"share target mismatch: declared bits 0x%08x, expected 0x%08x", declaredBits, expectedBits)}
+		// ShareTarget consistency — declared target must match consensus
+		declaredBits := util.TargetToCompact(share.ShareTarget)
+		expectedBits := util.TargetToCompact(expectedTarget)
+		if declaredBits != expectedBits {
+			return &ValidationError{Reason: fmt.Sprintf(
+				"share target mismatch: declared bits 0x%08x, expected 0x%08x", declaredBits, expectedBits)}
+		}
+	} else {
+		if share.ShareTarget == nil || share.ShareTarget.Sign() <= 0 {
+			return &ValidationError{Reason: "missing share target"}
+		}
+		if share.ShareTarget.Cmp(MaxShareTarget) > 0 {
+			return &ValidationError{Reason: "share target above maximum"}
+		}
+		if share.ShareTarget.Cmp(MinShareTarget) < 0 {
+			return &ValidationError{Reason: "share target below minimum"}
+		}
+		if !share.MeetsShareTarget() {
+			return &ValidationError{Reason: "share does not meet its declared target"}
+		}
 	}
 
 	// 8. Coinbase commitment — must contain correct PrevShareHash

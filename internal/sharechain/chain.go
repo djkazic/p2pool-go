@@ -184,11 +184,40 @@ func (sc *ShareChain) AddShare(share *types.Share) error {
 func (sc *ShareChain) AddShareQuiet(share *types.Share) error {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
+	return sc.addQuietLocked(share, false)
+}
 
+// AddShareAsRoot is AddShareQuiet, except that a share whose parent is not in
+// the store is accepted as the root of a chain instead of being rejected.
+//
+// Every node prunes to a bounded window, so the chain a peer serves starts at a
+// share whose parent nobody still has. With nowhere to anchor it, that first
+// share is unaddable and the rest of the chain cascades behind it: a node
+// cannot join a pool that has been running longer than one window, and a node
+// that was offline for longer than a window cannot catch back up.
+//
+// The sync driver calls this for the oldest share of a batch only, so a gap
+// mid-batch does not quietly spawn a disconnected fragment. It is safe because
+// a rooted chain starts from zero accumulated work — to become this node's tip
+// it has to out-work the chain already held, which a fabricated chain cannot do
+// without real hashrate. Gossip never takes this path.
+func (sc *ShareChain) AddShareAsRoot(share *types.Share) error {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	return sc.addQuietLocked(share, true)
+}
+
+// addQuietLocked must be called with sc.mu held.
+func (sc *ShareChain) addQuietLocked(share *types.Share, allowRoot bool) error {
 	hash := share.Hash()
 
 	if sc.store.Has(hash) {
 		return nil
+	}
+
+	if allowRoot {
+		sc.validator.allowRoot = true
+		defer func() { sc.validator.allowRoot = false }()
 	}
 
 	if err := sc.validator.ValidateShare(share); err != nil {
@@ -362,6 +391,18 @@ func (sc *ShareChain) PruneOrphans() int {
 	}
 
 	return pruned
+}
+
+// PruneKeep returns how many shares to retain on disk for a given PPLNS
+// window size.
+//
+// The payout window must sit entirely inside the part of the chain we can
+// validate strictly, so we hold a further difficulty window below it: the
+// consensus target is not agreeable for shares within one difficulty window
+// of the prune horizon, because peers there see further back than we do
+// (see Validator.historyIsComplete).
+func PruneKeep(windowSize int) int {
+	return windowSize + DifficultyAdjustmentWindow + 1
 }
 
 // PruneOldShares removes shares beyond the most recent maxKeep on the main chain.

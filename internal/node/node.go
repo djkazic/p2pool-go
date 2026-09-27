@@ -173,6 +173,10 @@ func (n *Node) Start(ctx context.Context) error {
 	diffCalc := sharechain.NewDifficultyCalculator(n.config.ShareTargetTime)
 	n.chain = sharechain.NewShareChain(store, diffCalc, n.config.PPLNSWindowSize, n.config.BitcoinNetwork, n.logger)
 
+	// Cumulative work is not persisted; rebuild it before anything can run
+	// fork choice, so every share is measured from the same anchor.
+	n.chain.RebuildWork()
+
 	if err := n.chain.ValidateLoaded(); err != nil {
 		return fmt.Errorf("sharechain validation failed: %w", err)
 	}

@@ -267,7 +267,7 @@ func TestForkChoice_SelectTip(t *testing.T) {
 	tipB = prevB
 
 	// Fork choice should select the heavier chain
-	selected := fc.SelectTip(tipA, tipB, 100)
+	selected := fc.SelectTip(tipA, tipB)
 	if selected != tipB {
 		t.Error("fork choice should select heavier chain (B)")
 	}
@@ -277,10 +277,10 @@ func TestForkChoice_ChildAlwaysExtendsTip(t *testing.T) {
 	store := NewMemoryStore()
 	fc := NewForkChoice(store)
 
-	// Build a chain longer than the window size.
-	// With a small window (5), once the chain exceeds 5 shares, a child
-	// extending the tip has equal cumulative work (drops oldest, adds itself).
-	// The child must still always become the new tip.
+	// Build a chain longer than what used to be the fork-choice window.
+	// Cumulative work now spans the whole chain rather than the most recent
+	// windowSize shares, so a child strictly outweighs the tip it extends
+	// and wins on work alone — no special case needed.
 	windowSize := 5
 	var prevHash [32]byte
 	for i := 0; i < windowSize+3; i++ {
@@ -295,15 +295,15 @@ func TestForkChoice_ChildAlwaysExtendsTip(t *testing.T) {
 	_ = store.Add(child)
 	childHash := child.Hash()
 
-	// Verify both have the same cumulative work (the bug condition)
-	currentWork := fc.ChainWork(currentTip, windowSize)
-	childWork := fc.ChainWork(childHash, windowSize)
-	if currentWork.Cmp(childWork) != 0 {
-		t.Logf("work differs (current=%s, child=%s) — test still valid but not exercising tie case", currentWork, childWork)
+	// The child must carry strictly more work than the tip it extends.
+	currentWork := fc.ChainWork(currentTip)
+	childWork := fc.ChainWork(childHash)
+	if childWork.Cmp(currentWork) <= 0 {
+		t.Errorf("child must outweigh the tip it extends: current=%s child=%s", currentWork, childWork)
 	}
 
 	// The child must always win, regardless of hash comparison
-	selected := fc.SelectTip(currentTip, childHash, windowSize)
+	selected := fc.SelectTip(currentTip, childHash)
 	if selected != childHash {
 		t.Error("child extending the current tip must always become the new tip")
 	}
@@ -898,15 +898,14 @@ func TestChainWork_CachesResultOnShare(t *testing.T) {
 		prev = s.Hash()
 	}
 
-	// Fresh tip — cumulativeWork has been populated by AddShare's SelectTip
-	// (the direct-extension fast path skips ChainWork, so let's force it).
+	// AddShare assigns cumulative work as each share lands, so the tip
+	// already carries a value; ChainWork must agree with it.
 	tip := shares[len(shares)-1]
-	if tip.CumulativeWork() != nil {
-		// Already cached (a previous fork-choice call must have computed it).
-		// That's fine; we just want to confirm caching works end-to-end.
+	if tip.CumulativeWork() == nil {
+		t.Fatal("AddShare should have assigned cumulative work to the tip")
 	}
 
-	work1 := fc.ChainWork(tip.Hash(), 8640)
+	work1 := fc.ChainWork(tip.Hash())
 	if tip.CumulativeWork() == nil {
 		t.Fatal("CumulativeWork should be populated after ChainWork")
 	}
@@ -916,7 +915,7 @@ func TestChainWork_CachesResultOnShare(t *testing.T) {
 
 	// Second call returns the same value without changing the cache.
 	cachedBefore := tip.CumulativeWork()
-	work2 := fc.ChainWork(tip.Hash(), 8640)
+	work2 := fc.ChainWork(tip.Hash())
 	if work2.Cmp(work1) != 0 {
 		t.Errorf("cache-hit returned different value: first=%s second=%s", work1, work2)
 	}
@@ -943,7 +942,7 @@ func TestChainWork_IncrementalExtension(t *testing.T) {
 			t.Fatalf("add share %d: %v", i, err)
 		}
 		// Force the cache to populate for each new tip.
-		_ = fc.ChainWork(s.Hash(), 8640)
+		_ = fc.ChainWork(s.Hash())
 		shares = append(shares, s)
 		prev = s.Hash()
 	}
@@ -990,8 +989,8 @@ func TestChainWork_ForkedSharesHaveDistinctWork(t *testing.T) {
 		t.Fatalf("add siblingB: %v", err)
 	}
 
-	_ = fc.ChainWork(siblingA.Hash(), 8640)
-	_ = fc.ChainWork(siblingB.Hash(), 8640)
+	_ = fc.ChainWork(siblingA.Hash())
+	_ = fc.ChainWork(siblingB.Hash())
 
 	a := siblingA.CumulativeWork()
 	b := siblingB.CumulativeWork()

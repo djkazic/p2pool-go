@@ -126,6 +126,10 @@ func (sc *ShareChain) AddShare(share *types.Share) error {
 		return fmt.Errorf("store share: %w", err)
 	}
 
+	// Record cumulative work now that the share is in the store, so fork
+	// choice compares whole-chain totals rather than rebuilding them.
+	sc.forkChoice.AssignWork(share)
+
 	// Update tip via fork choice
 	oldTip, hadTip := sc.store.Tip()
 	var oldTipHash [32]byte
@@ -133,7 +137,7 @@ func (sc *ShareChain) AddShare(share *types.Share) error {
 		oldTipHash = oldTip.Hash()
 	}
 
-	newTipHash := sc.forkChoice.SelectTip(oldTipHash, hash, sc.windowSize)
+	newTipHash := sc.forkChoice.SelectTip(oldTipHash, hash)
 	if err := sc.store.SetTip(newTipHash); err != nil {
 		return fmt.Errorf("set tip: %w", err)
 	}
@@ -199,13 +203,15 @@ func (sc *ShareChain) AddShareQuiet(share *types.Share) error {
 		return fmt.Errorf("store share: %w", err)
 	}
 
+	sc.forkChoice.AssignWork(share)
+
 	oldTip, hadTip := sc.store.Tip()
 	var oldTipHash [32]byte
 	if hadTip {
 		oldTipHash = oldTip.Hash()
 	}
 
-	newTipHash := sc.forkChoice.SelectTip(oldTipHash, hash, sc.windowSize)
+	newTipHash := sc.forkChoice.SelectTip(oldTipHash, hash)
 	if err := sc.store.SetTip(newTipHash); err != nil {
 		return fmt.Errorf("set tip: %w", err)
 	}
@@ -416,6 +422,32 @@ func (sc *ShareChain) PruneOldShares(maxKeep int) int {
 	)
 
 	return pruned
+}
+
+// RebuildWork recomputes cumulative work for the shares loaded from disk.
+//
+// Cumulative work is not persisted, so after a restart every share starts
+// without one. Walking the main chain once here anchors the whole store at
+// a single point — the oldest share that survived pruning — so that every
+// value fork choice later compares is measured from the same place.
+//
+// Shares on forks are left to fork choice, which fills them in on first
+// comparison; they descend from a share on the main chain and so pick up
+// the same anchor.
+func (sc *ShareChain) RebuildWork() {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+
+	tip, ok := sc.store.Tip()
+	if !ok {
+		return
+	}
+
+	work := sc.forkChoice.ChainWork(tip.Hash())
+	sc.logger.Info("sharechain work rebuilt",
+		zap.Int("shares", sc.store.Count()),
+		zap.String("tip_work", work.String()),
+	)
 }
 
 // ValidateLoaded validates all shares loaded from disk.

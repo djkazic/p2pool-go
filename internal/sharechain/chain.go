@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/djkazic/p2pool-go/internal/pplns"
 	"github.com/djkazic/p2pool-go/internal/types"
 	"github.com/djkazic/p2pool-go/pkg/util"
 
@@ -37,6 +38,7 @@ type ShareChain struct {
 	validator  *Validator
 	forkChoice *ForkChoice
 	diffCalc   *DifficultyCalculator
+	payoutCalc *pplns.Calculator
 	logger     *zap.Logger
 
 	windowSize    int
@@ -53,11 +55,30 @@ func NewShareChain(store ShareStore, diffCalc *DifficultyCalculator, windowSize 
 		store:      store,
 		forkChoice: NewForkChoice(store),
 		diffCalc:   diffCalc,
+		payoutCalc: pplns.NewCalculator(ConsensusFinderFeeBasisPoints, ConsensusDustThresholdSats),
 		logger:     logger,
 		windowSize: windowSize,
 	}
-	sc.validator = NewValidator(store, sc.getExpectedTargetForParent, network)
+	sc.validator = NewValidator(store, sc.getExpectedTargetForParent,
+		sc.expectedPayoutsLocked, windowSize, network)
 	return sc
+}
+
+// expectedPayoutsLocked computes the PPLNS split a share building on
+// parentHash must pay. Must be called with sc.mu held.
+func (sc *ShareChain) expectedPayoutsLocked(parentHash [32]byte, totalReward int64, finder string) []types.PayoutEntry {
+	ancestors := sc.store.GetAncestors(parentHash, sc.windowSize)
+	window := pplns.NewWindow(ancestors, MaxShareTarget)
+	return sc.payoutCalc.CalculatePayouts(window, totalReward, finder)
+}
+
+// ExpectedPayouts computes the PPLNS split a share building on parentHash must
+// pay. The node builds its own coinbase from this so that what it produces is
+// what every other node will independently recompute and check.
+func (sc *ShareChain) ExpectedPayouts(parentHash [32]byte, totalReward int64, finder string) []types.PayoutEntry {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	return sc.expectedPayoutsLocked(parentHash, totalReward, finder)
 }
 
 // Subscribe returns a channel that receives sharechain events.

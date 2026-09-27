@@ -303,3 +303,45 @@ func TestProbe_FutureTimestampClassifiedProvable(t *testing.T) {
 			"peer that relayed it")
 	}
 }
+
+// Finding 9: the coinbase must pay the PPLNS window, not just the submitter.
+func TestProbe_CoinbaseMustPayTheWindow(t *testing.T) {
+	chain := newChain(8640)
+	now := uint32(time.Now().Unix()) - 400
+
+	// miner1 does all the work: ten shares in the window.
+	var prev [32]byte
+	for i := 0; i < 10; i++ {
+		s := makeTestShare(prev, testMiner1, now+uint32(i*30))
+		if err := chain.AddShare(s); err != nil {
+			t.Fatalf("add %d: %v", i, err)
+		}
+		prev = s.Hash()
+	}
+
+	// miner2 now submits a share whose coinbase pays 100% to miner2 and
+	// nothing to miner1, who earned essentially the whole window.
+	greedy := makeTestShare(prev, testMiner2, now+uint32(10*30))
+	outs, err := types.ParseCoinbaseOutputs(greedy.CoinbaseTx)
+	if err != nil {
+		t.Fatalf("parse outputs: %v", err)
+	}
+	t.Logf("greedy share coinbase has %d output(s)", len(outs))
+	for _, o := range outs {
+		t.Logf("   %d sats to script %x", o.Value, o.Script[:8])
+	}
+
+	err = chain.AddShare(greedy)
+	t.Logf("verdict: %v", err)
+	if err == nil {
+		t.Error("a share paying the entire coinbase to its own miner was accepted; " +
+			"validation is not checking the payout distribution against the window")
+	}
+
+	// The mirror image: a share that DOES pay the window must be accepted, so
+	// the rule cannot be satisfied by rejecting everything.
+	honest := makeValidShare(chain, prev, testMiner2, now+uint32(10*30))
+	if err := chain.AddShare(honest); err != nil {
+		t.Errorf("a share paying the correct PPLNS split was rejected: %v", err)
+	}
+}

@@ -186,7 +186,11 @@ func (n *Node) Start(ctx context.Context) error {
 	n.initLastBlock()
 
 	// PPLNS Calculator
-	n.pplnsCalc = pplns.NewCalculator(n.config.FinderFeePercent, n.config.DustThresholdSats)
+	// Payout parameters come from the protocol, not from this node's config:
+	// validation recomputes the split and compares it against the coinbase,
+	// so a node using its own numbers would build shares nobody accepts.
+	n.pplnsCalc = pplns.NewCalculator(
+		sharechain.ConsensusFinderFeeBasisPoints, sharechain.ConsensusDustThresholdSats)
 
 	// Stratum Server
 	n.stratumSrv = stratum.NewServer(n.config.StartDifficulty, n.logger)
@@ -1526,11 +1530,6 @@ func (n *Node) getPayouts() []types.PayoutEntry {
 		}
 	}
 
-	tipHash := tip.Hash()
-	ancestors := n.chain.GetAncestors(tipHash, n.config.PPLNSWindowSize)
-	maxTarget := sharechain.MaxShareTarget
-	window := pplns.NewWindow(ancestors, maxTarget)
-
 	// Use the current template's coinbase value
 	tmpl := n.workGen.CurrentTemplate()
 	totalReward := int64(5000000000) // fallback
@@ -1538,7 +1537,9 @@ func (n *Node) getPayouts() []types.PayoutEntry {
 		totalReward = tmpl.CoinbaseValue
 	}
 
-	return n.pplnsCalc.CalculatePayouts(window, totalReward, n.minerAddress)
+	// Built through the chain so the coinbase we produce is exactly what every
+	// other node independently recomputes when it validates our share.
+	return n.chain.ExpectedPayouts(tip.Hash(), totalReward, n.minerAddress)
 }
 
 // getPrevShareHash returns the current chain tip hash for the sharechain commitment.

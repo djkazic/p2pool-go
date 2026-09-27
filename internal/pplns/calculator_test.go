@@ -62,7 +62,7 @@ func TestCalculatePayouts_WithFinderFee(t *testing.T) {
 	}
 
 	window := NewWindow(shares, maxTarget)
-	calc := NewCalculator(0.5, 546) // 0.5% finder fee
+	calc := NewCalculator(50, 546) // 0.50% finder fee (50 basis points)
 
 	totalReward := int64(5000000000) // 50 BTC
 	payouts := calc.CalculatePayouts(window, totalReward, "miner1")
@@ -127,7 +127,7 @@ func TestCalculatePayouts_DustConsolidation(t *testing.T) {
 func TestCalculatePayouts_Empty(t *testing.T) {
 	maxTarget := easyTarget()
 	window := NewWindow([]*types.Share{}, maxTarget)
-	calc := NewCalculator(0.5, 546)
+	calc := NewCalculator(50, 546)
 
 	payouts := calc.CalculatePayouts(window, 1000000, "miner1")
 	if payouts != nil {
@@ -145,7 +145,7 @@ func TestCalculatePayouts_SingleMiner(t *testing.T) {
 	}
 
 	window := NewWindow(shares, maxTarget)
-	calc := NewCalculator(0.5, 546)
+	calc := NewCalculator(50, 546)
 
 	payouts := calc.CalculatePayouts(window, 5000000000, "solo")
 

@@ -19,16 +19,24 @@ func sortedAddresses(payouts map[string]int64) []string {
 }
 
 // Calculator computes PPLNS payouts.
+//
+// Every node has to reach the same answer: validation recomputes the split
+// from the share's own window and compares it against the coinbase, so any
+// disagreement is a rejected share. The arithmetic is therefore exact
+// integer arithmetic throughout, and the parameters are protocol constants
+// rather than per-node configuration.
 type Calculator struct {
-	finderFeePercent  float64
-	dustThresholdSats int64
+	finderFeeBasisPoints int64
+	dustThresholdSats    int64
 }
 
-// NewCalculator creates a new PPLNS calculator.
-func NewCalculator(finderFeePercent float64, dustThresholdSats int64) *Calculator {
+// NewCalculator creates a new PPLNS calculator. The finder fee is given in
+// basis points (hundredths of a percent) so the split needs no float
+// arithmetic: 50 is 0.50%.
+func NewCalculator(finderFeeBasisPoints int64, dustThresholdSats int64) *Calculator {
 	return &Calculator{
-		finderFeePercent:  finderFeePercent,
-		dustThresholdSats: dustThresholdSats,
+		finderFeeBasisPoints: finderFeeBasisPoints,
+		dustThresholdSats:    dustThresholdSats,
 	}
 }
 
@@ -40,8 +48,8 @@ func (c *Calculator) CalculatePayouts(window *Window, totalReward int64, finderA
 		return nil
 	}
 
-	// Calculate finder fee
-	finderFee := int64(float64(totalReward) * c.finderFeePercent / 100.0)
+	// Calculate finder fee (exact integer arithmetic; see the type comment)
+	finderFee := totalReward * c.finderFeeBasisPoints / 10000
 	distributableReward := totalReward - finderFee
 
 	// Get per-miner weights

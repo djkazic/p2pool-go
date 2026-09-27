@@ -32,15 +32,32 @@ func maxTarget() *big.Int {
 // It mines a valid nonce so the hash meets the target.
 // PrevShareHash is embedded in PrevBlockHash to ensure unique hashes per chain.
 // A valid coinbase transaction is built with the sharechain commitment and miner output.
+// testCoinbaseValue is the coinbase total every test share pays out.
+const testCoinbaseValue = int64(5000000000)
+
 func makeTestShare(prevShareHash [32]byte, minerAddr string, timestamp uint32) *types.Share {
+	return makeTestShareWithPayouts(prevShareHash, minerAddr, timestamp,
+		[]types.PayoutEntry{{Address: minerAddr, Amount: testCoinbaseValue}})
+}
+
+// makeValidShare builds a share whose coinbase pays the PPLNS split that chain
+// will recompute when it validates it. Needed wherever a test adds shares from
+// more than one miner: once a window has several contributors, a coinbase
+// paying only the submitter no longer matches what consensus expects.
+func makeValidShare(chain *ShareChain, prevShareHash [32]byte, minerAddr string, timestamp uint32) *types.Share {
+	payouts := chain.ExpectedPayouts(prevShareHash, testCoinbaseValue, minerAddr)
+	if len(payouts) == 0 {
+		payouts = []types.PayoutEntry{{Address: minerAddr, Amount: testCoinbaseValue}}
+	}
+	return makeTestShareWithPayouts(prevShareHash, minerAddr, timestamp, payouts)
+}
+
+func makeTestShareWithPayouts(prevShareHash [32]byte, minerAddr string, timestamp uint32, payouts []types.PayoutEntry) *types.Share {
 	target := maxTarget()
 
 	// Build a valid coinbase transaction
 	builder := types.NewCoinbaseBuilder(testNetwork)
 	commitment := types.BuildShareCommitment(prevShareHash)
-	payouts := []types.PayoutEntry{
-		{Address: minerAddr, Amount: 5000000000},
-	}
 	coinbaseTx, _, err := builder.BuildCoinbase(800000, commitment, payouts, "", 8)
 	if err != nil {
 		panic("makeTestShare: BuildCoinbase failed: " + err.Error())
@@ -356,7 +373,7 @@ func TestShareChain_ReorgEventFields(t *testing.T) {
 	baseTime := time.Now().Add(-5 * time.Minute)
 
 	// Genesis
-	genesis := makeTestShare([32]byte{}, testMiner1, uint32(baseTime.Unix()))
+	genesis := makeValidShare(chain, [32]byte{}, testMiner1, uint32(baseTime.Unix()))
 	if err := chain.AddShare(genesis); err != nil {
 		t.Fatalf("AddShare genesis: %v", err)
 	}
@@ -365,7 +382,7 @@ func TestShareChain_ReorgEventFields(t *testing.T) {
 	// Chain A: 3 shares (becomes tip first)
 	prevA := genesisHash
 	for i := 0; i < 3; i++ {
-		s := makeTestShare(prevA, testMiner1, uint32(baseTime.Unix()+int64((i+1)*30)))
+		s := makeValidShare(chain, prevA, testMiner1, uint32(baseTime.Unix()+int64((i+1)*30)))
 		if err := chain.AddShare(s); err != nil {
 			t.Fatalf("AddShare A[%d]: %v", i, err)
 		}
@@ -382,7 +399,7 @@ func TestShareChain_ReorgEventFields(t *testing.T) {
 	// Chain B: 5 shares from genesis (heavier, must trigger reorg)
 	prevB := genesisHash
 	for i := 0; i < 5; i++ {
-		s := makeTestShare(prevB, testMiner2, uint32(baseTime.Unix()+int64((i+1)*30)))
+		s := makeValidShare(chain, prevB, testMiner2, uint32(baseTime.Unix()+int64((i+1)*30)))
 		if err := chain.AddShare(s); err != nil {
 			t.Fatalf("AddShare B[%d]: %v", i, err)
 		}
@@ -425,7 +442,7 @@ func TestShareChain_PruneOrphans(t *testing.T) {
 	baseTime := time.Now().Add(-5 * time.Minute)
 
 	// Genesis
-	genesis := makeTestShare([32]byte{}, testMiner1, uint32(baseTime.Unix()))
+	genesis := makeValidShare(chain, [32]byte{}, testMiner1, uint32(baseTime.Unix()))
 	if err := chain.AddShare(genesis); err != nil {
 		t.Fatalf("AddShare genesis: %v", err)
 	}
@@ -434,7 +451,7 @@ func TestShareChain_PruneOrphans(t *testing.T) {
 	// Main chain: 5 shares
 	prev := genesisHash
 	for i := 0; i < 5; i++ {
-		s := makeTestShare(prev, testMiner1, uint32(baseTime.Unix()+int64((i+1)*30)))
+		s := makeValidShare(chain, prev, testMiner1, uint32(baseTime.Unix()+int64((i+1)*30)))
 		if err := chain.AddShare(s); err != nil {
 			t.Fatalf("AddShare main[%d]: %v", i, err)
 		}
@@ -444,7 +461,7 @@ func TestShareChain_PruneOrphans(t *testing.T) {
 	// Fork: 2 shares from genesis (shorter, won't become tip)
 	prevFork := genesisHash
 	for i := 0; i < 2; i++ {
-		s := makeTestShare(prevFork, testMiner2, uint32(baseTime.Unix()+int64((i+1)*30)))
+		s := makeValidShare(chain, prevFork, testMiner2, uint32(baseTime.Unix()+int64((i+1)*30)))
 		if err := chain.AddShare(s); err != nil {
 			t.Fatalf("AddShare fork[%d]: %v", i, err)
 		}
@@ -974,14 +991,14 @@ func TestChainWork_ForkedSharesHaveDistinctWork(t *testing.T) {
 	now := uint32(time.Now().Unix()) - 300
 
 	// Single parent.
-	parent := makeTestShare([32]byte{}, testMiner1, now)
+	parent := makeValidShare(chain, [32]byte{}, testMiner1, now)
 	if err := chain.AddShare(parent); err != nil {
 		t.Fatalf("add parent: %v", err)
 	}
 
 	// Two siblings — both reference parent.
-	siblingA := makeTestShare(parent.Hash(), testMiner1, now+30)
-	siblingB := makeTestShare(parent.Hash(), testMiner2, now+31)
+	siblingA := makeValidShare(chain, parent.Hash(), testMiner1, now+30)
+	siblingB := makeValidShare(chain, parent.Hash(), testMiner2, now+31)
 	if err := chain.AddShare(siblingA); err != nil {
 		t.Fatalf("add siblingA: %v", err)
 	}

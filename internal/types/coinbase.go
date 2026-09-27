@@ -532,6 +532,52 @@ func ParseCoinbaseOutputs(coinbaseTx []byte) ([]CoinbaseOutput, error) {
 	return outputs, nil
 }
 
+// ValidatePayoutsInOutputs checks that the coinbase's value-carrying outputs
+// pay exactly the expected set of addresses and amounts.
+//
+// Zero-value outputs are ignored: the witness commitment is carried as an
+// OP_RETURN with value 0 and is not a payout. Outputs are compared as a map
+// from script to total value, so ordering and splitting a recipient across
+// several outputs are both permitted — what must match is what each address
+// ends up with.
+func ValidatePayoutsInOutputs(outputs []CoinbaseOutput, expected []PayoutEntry, network string) error {
+	actual := make(map[string]int64, len(outputs))
+	for _, out := range outputs {
+		if out.Value == 0 {
+			continue
+		}
+		if out.Value < 0 {
+			return fmt.Errorf("coinbase output has negative value %d", out.Value)
+		}
+		actual[string(out.Script)] += out.Value
+	}
+
+	want := make(map[string]int64, len(expected))
+	for _, e := range expected {
+		script, err := addressToScript(e.Address, network)
+		if err != nil {
+			return fmt.Errorf("expected payout to %s: %w", e.Address, err)
+		}
+		want[string(script)] += e.Amount
+	}
+
+	for script, amount := range want {
+		got, ok := actual[script]
+		if !ok {
+			return fmt.Errorf("coinbase is missing a payout of %d to %x", amount, script)
+		}
+		if got != amount {
+			return fmt.Errorf("coinbase pays %d to %x, expected %d", got, script, amount)
+		}
+	}
+	for script, amount := range actual {
+		if _, ok := want[script]; !ok {
+			return fmt.Errorf("coinbase pays an unexpected %d to %x", amount, script)
+		}
+	}
+	return nil
+}
+
 // ValidateMinerInOutputs checks that at least one coinbase output pays to the
 // given miner address.
 func ValidateMinerInOutputs(outputs []CoinbaseOutput, minerAddress, network string) error {

@@ -90,8 +90,18 @@ func (c *Config) Validate() error {
 	if c.PPLNSWindowSize < 1 {
 		return fmt.Errorf("pplns-window-size must be at least 1")
 	}
-	if c.FinderFeePercent < 0 || c.FinderFeePercent > 100 {
-		return fmt.Errorf("finder-fee-percent must be 0-100")
+	// These two are consensus parameters, not tunables: validation recomputes
+	// each share's payout split and compares it against the coinbase, so a
+	// node running different numbers would reject every share its peers
+	// produce and have all of its own rejected in turn. They are kept as
+	// fields so an existing config file still loads, but must match.
+	if c.FinderFeePercent != DefaultConfig().FinderFeePercent {
+		return fmt.Errorf("finder-fee-percent is fixed by consensus at %g and cannot be changed",
+			DefaultConfig().FinderFeePercent)
+	}
+	if c.DustThresholdSats != DefaultConfig().DustThresholdSats {
+		return fmt.Errorf("dust-threshold-sats is fixed by consensus at %d and cannot be changed",
+			DefaultConfig().DustThresholdSats)
 	}
 	return nil
 }

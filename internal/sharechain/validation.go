@@ -64,6 +64,8 @@ func (e *ValidationError) Error() string {
 type Validator struct {
 	store          ShareStore
 	targetFunc     func(parentHash [32]byte) *big.Int
+	payoutFunc     func(parentHash [32]byte, totalReward int64, finder string) []types.PayoutEntry
+	windowSize     int
 	network        string
 	skipTimeChecks bool // set during ValidateLoaded replay
 	allowRoot      bool // set by AddShareAsRoot when anchoring a synced chain
@@ -102,10 +104,18 @@ func (v *Validator) historyIsComplete(parentHash [32]byte, depth int) bool {
 }
 
 // NewValidator creates a new share validator.
-func NewValidator(store ShareStore, targetFunc func(parentHash [32]byte) *big.Int, network string) *Validator {
+func NewValidator(
+	store ShareStore,
+	targetFunc func(parentHash [32]byte) *big.Int,
+	payoutFunc func(parentHash [32]byte, totalReward int64, finder string) []types.PayoutEntry,
+	windowSize int,
+	network string,
+) *Validator {
 	return &Validator{
 		store:      store,
 		targetFunc: targetFunc,
+		payoutFunc: payoutFunc,
+		windowSize: windowSize,
 		network:    network,
 	}
 }
@@ -245,13 +255,44 @@ func (v *Validator) ValidateShare(share *types.Share) error {
 				committedHash[:8], share.PrevShareHash[:8])}
 		}
 
-		// 9. Miner in outputs — coinbase must pay MinerAddress
+		// 9. Coinbase outputs must be the PPLNS split for this share's window.
+		//
+		// This is the rule that makes the pool trustless. Without it the only
+		// requirement is that the coinbase pays the submitting miner
+		// *something*, and a miner can take the entire block reward while the
+		// window's real contributors get nothing.
+		//
+		// The reward total is read from the share's own coinbase rather than
+		// from a block template: the template depends on each node's mempool,
+		// so peers cannot agree on an absolute figure. What they can agree on
+		// is how a given total must be divided, which is what is checked here.
 		outputs, err := types.ParseCoinbaseOutputs(share.CoinbaseTx)
 		if err != nil {
 			return &ValidationError{Reason: fmt.Sprintf("coinbase output parsing failed: %v", err)}
 		}
 		if err := types.ValidateMinerInOutputs(outputs, share.MinerAddress, v.network); err != nil {
 			return &ValidationError{Reason: fmt.Sprintf("miner not in coinbase outputs: %v", err)}
+		}
+
+		// Only enforceable where we hold the window the split is derived from.
+		// Near a node's prune horizon peers see further back than we do, so a
+		// split computed here would differ from theirs; the same reasoning as
+		// the target check above.
+		if !isRoot && v.payoutFunc != nil && v.historyIsComplete(share.PrevShareHash, v.windowSize) {
+			var totalReward int64
+			for _, out := range outputs {
+				if out.Value > 0 {
+					totalReward += out.Value
+				}
+			}
+			expected := v.payoutFunc(share.PrevShareHash, totalReward, share.MinerAddress)
+			// An empty window (the first share of a chain) has no split to
+			// enforce; the miner-in-outputs check above still applies.
+			if len(expected) > 0 {
+				if err := types.ValidatePayoutsInOutputs(outputs, expected, v.network); err != nil {
+					return &ValidationError{Reason: fmt.Sprintf("coinbase does not pay the PPLNS window: %v", err)}
+				}
+			}
 		}
 	} else {
 		return &ValidationError{Reason: "missing coinbase transaction"}

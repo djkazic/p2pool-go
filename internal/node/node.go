@@ -54,7 +54,6 @@ type Node struct {
 	syncMu sync.Mutex
 
 	// Reorg tracking: skip duplicate EventNewTip after reorg
-	lastReorgTip [32]byte
 
 	// Diagnostics
 	shareRejectCount uint64
@@ -527,14 +526,15 @@ func (n *Node) dropMisbehavingPeer(id peer.ID) {
 func (n *Node) handleChainEvent(event sharechain.Event) {
 	switch event.Type {
 	case sharechain.EventNewTip:
-		// Skip if this tip was already handled by a reorg event
-		tipHash := event.Share.Hash()
-		if n.lastReorgTip != ([32]byte{}) && tipHash == n.lastReorgTip {
-			n.lastReorgTip = [32]byte{}
-			return
-		}
-
-		// Regenerate jobs when the chain tip changes
+		// Regenerate jobs when the chain tip changes.
+		//
+		// A reorg emits EventReorg and then EventNewTip, so this generates a
+		// second job for the same tip. That is deliberate. The previous
+		// version suppressed it with a lastReorgTip flag, but emit() drops
+		// events when the subscriber channel is full: if the EventNewTip the
+		// flag was armed for was dropped, the flag stayed armed and swallowed
+		// a later, genuine tip event, leaving miners on a stale parent. A
+		// redundant mining.notify on the rare reorg costs far less.
 		job, err := n.workGen.GenerateJob()
 		if err != nil {
 			n.logger.Error("failed to generate job after new tip", zap.Error(err))
@@ -567,9 +567,6 @@ func (n *Node) handleChainEvent(event sharechain.Event) {
 		}
 		job.CleanJobs = true
 		n.handleNewJob(job)
-
-		// Track this tip so we skip the subsequent EventNewTip
-		n.lastReorgTip = event.Share.Hash()
 	}
 }
 
